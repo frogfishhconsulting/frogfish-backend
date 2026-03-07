@@ -41,7 +41,52 @@ app.post("/anthropic/generate", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/apollo/search", async (req, res) => {
+  const { apolloKey, ...params } = req.body;
 
+  if (!apolloKey) {
+    return res.status(400).json({ error: "Missing Apollo API key" });
+  }
+
+  try {
+    const r = await fetch("https://api.apollo.io/v1/mixed_people/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": apolloKey
+      },
+      body: JSON.stringify(params)
+    });
+
+    const data = await r.json();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/apollo/search", async (req, res) => {
+  const { apolloKey, ...params } = req.body;
+
+  if (!apolloKey) {
+    return res.status(400).json({ error: "Missing Apollo API key" });
+  }
+
+  try {
+    const r = await fetch("https://api.apollo.io/v1/mixed_people/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": apolloKey
+      },
+      body: JSON.stringify(params)
+    });
+
+    const data = await r.json();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
