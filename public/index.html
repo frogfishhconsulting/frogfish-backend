@@ -3,31 +3,72 @@
 <head>
 <meta charset="UTF-8">
 <title>Frogfish BD Agent</title>
+
 <style>
-body {
-  font-family: Arial;
-  background: #0a0f0d;
-  color: #e2ffe8;
-  padding: 40px;
+
+body{
+font-family:Arial;
+background:#07130e;
+color:#e2ffe8;
+padding:30px;
 }
-.card {
-  background: #0e1a12;
-  border: 1px solid #1a3320;
-  padding: 20px;
-  border-radius: 6px;
+
+h1{
+margin-bottom:25px;
 }
-button {
-  background:#1a5c2e;
-  color:#4ade80;
-  border:1px solid #4ade80;
-  padding:10px 16px;
-  cursor:pointer;
+
+.card{
+background:#0e1a12;
+border:1px solid #1a3320;
+padding:20px;
+border-radius:8px;
+margin-bottom:20px;
 }
-textarea {
-  width:100%;
-  height:200px;
+
+input,textarea,select{
+width:100%;
+padding:10px;
+margin-top:6px;
+margin-bottom:14px;
+background:#08100c;
+color:#e2ffe8;
+border:1px solid #24402d;
+border-radius:6px;
 }
+
+button{
+background:#1a5c2e;
+color:#4ade80;
+border:1px solid #4ade80;
+padding:10px 16px;
+cursor:pointer;
+border-radius:6px;
+margin-right:8px;
+}
+
+button:hover{
+background:#4ade80;
+color:#07130e;
+}
+
+.lead{
+padding:10px;
+border-bottom:1px solid #1a3320;
+cursor:pointer;
+}
+
+.lead:hover{
+background:#102016;
+}
+
+pre{
+background:#08100c;
+padding:12px;
+border-radius:6px;
+}
+
 </style>
+
 </head>
 
 <body>
@@ -35,111 +76,165 @@ textarea {
 <h1>🐸 Frogfish BD Agent</h1>
 
 <div class="card">
-<p>Generate a cold email using Claude.</p>
 
-<input id="key" placeholder="Anthropic API key (sk-ant...)" style="width:100%;margin-bottom:10px;" />
+<h3>API Keys</h3>
 
-<textarea id="prompt">Write a cold outbound email for a marketing agency helping companies connect CRM revenue data to Google Ads.</textarea>
+<input id="anthropicKey" placeholder="Anthropic API key">
+<input id="apolloKey" placeholder="Apollo API key">
+<input id="instantlyKey" placeholder="Instantly API key">
 
-<br><br>
+<button onclick="saveKeys()">Save Keys</button>
 
-<button onclick="generate()">Generate Email</button>
+</div>
 
-<pre id="result"></pre>
+<div class="card">
+
+<h3>Find Leads</h3>
+
+<select id="industry">
+<option value="law firms">Law Firms</option>
+<option value="home services">Home Services</option>
+<option value="financial services">Financial</option>
+</select>
+
+<select id="title">
+<option value="CMO">CMO</option>
+<option value="VP Marketing">VP Marketing</option>
+<option value="Marketing Director">Marketing Director</option>
+<option value="Owner">Owner</option>
+</select>
+
+<button onclick="scanApollo()">Scan Apollo</button>
+
+<div id="scanStatus"></div>
+
+</div>
+
+<div class="card">
+
+<h3>Leads</h3>
+
+<div id="leadList"></div>
+
+</div>
+
+<div class="card">
+
+<h3>Lead Detail</h3>
+
+<div id="leadDetail">Select a lead</div>
 
 </div>
 
 <script>
 
-async function generate() {
-
-  const key = document.getElementById("key").value
-  const prompt = document.getElementById("prompt").value
-
-  const res = await fetch("/anthropic/generate",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json"},
-    body: JSON.stringify({
-      anthropicKey:key,
-      prompt
-    })
-  })
-
-  const data = await res.json()
-
-  document.getElementById("result").textContent =
-    data.content?.[0]?.text || JSON.stringify(data,null,2)
+let state={
+leads:[],
+selected:null,
+email:""
 }
-async function scanApollo() {
 
-  const status = document.getElementById("scanStatus")
-  status.textContent = "Scanning Apollo..."
+function saveKeys(){
 
-  const industry = document.getElementById("industry").value
-  const title = document.getElementById("title").value
+localStorage.setItem("anthropicKey",document.getElementById("anthropicKey").value)
+localStorage.setItem("apolloKey",document.getElementById("apolloKey").value)
+localStorage.setItem("instantlyKey",document.getElementById("instantlyKey").value)
 
-  const res = await fetch("/apollo/search",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json"},
-    body: JSON.stringify({
-      apolloKey: state.keys.apolloKey,
-      page:1,
-      per_page:10,
-      person_titles:[title],
-      q_organization_keyword_tags:[industry],
-      person_locations:["United States"]
-    })
-  })
-
-  const data = await res.json()
-
-  state.leads = data.people || []
-
-  renderLeads()
-
-  status.textContent = state.leads.length + " leads found"
+alert("Saved")
 
 }
-  async function generateEmail(){
 
-  const lead = state.selectedLead
+async function scanApollo(){
 
-  const res = await fetch("/anthropic/generate",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json"},
-    body: JSON.stringify({
-      anthropicKey: state.keys.anthropicKey,
-      prompt: "Write a short cold email to " + lead.name +
-      " at " + lead.organization?.name +
-      " about improving marketing ROI by connecting CRM revenue data to ad platforms."
-    })
-  })
+document.getElementById("scanStatus").innerText="Scanning..."
 
-  const data = await res.json()
+const res=await fetch("/apollo/search",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+apolloKey:localStorage.getItem("apolloKey"),
+page:1,
+per_page:10
+})
+})
 
-  state.generatedEmail = data.content?.[0]?.text || "No response"
+const data=await res.json()
 
-  renderLeadDetail()
+state.leads=data.people||[]
 
-}
-  async function sendEmail(){
+renderLeads()
 
-  const lead = state.selectedLead
-
-  await fetch("/instantly/send",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json"},
-    body: JSON.stringify({
-      instantlyKey: state.keys.instantlyKey,
-      to: lead.email,
-      subject: "Quick question",
-      body: state.generatedEmail
-    })
-  })
-
-  alert("Email sent")
+document.getElementById("scanStatus").innerText=state.leads.length+" leads found"
 
 }
+
+function renderLeads(){
+
+const list=document.getElementById("leadList")
+
+list.innerHTML=state.leads.map((l,i)=>`
+<div class="lead" onclick="selectLead(${i})">
+<b>${l.name||""}</b><br>
+${l.title||""}<br>
+${l.email||""}
+</div>
+`).join("")
+
+}
+
+function selectLead(i){
+
+state.selected=state.leads[i]
+
+document.getElementById("leadDetail").innerHTML=`
+<b>${state.selected.name}</b><br>
+${state.selected.title}<br>
+${state.selected.email}<br><br>
+
+<button onclick="generateEmail()">Generate Email</button>
+<button onclick="sendEmail()">Send Email</button>
+
+<pre id="emailBox"></pre>
+`
+
+}
+
+async function generateEmail(){
+
+const res=await fetch("/anthropic/generate",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+anthropicKey:localStorage.getItem("anthropicKey"),
+prompt:"Write a short cold email to "+state.selected.name+" at "+state.selected.organization?.name+" about improving marketing ROI."
+})
+})
+
+const data=await res.json()
+
+state.email=data.content?.[0]?.text||""
+
+document.getElementById("emailBox").innerText=state.email
+
+}
+
+async function sendEmail(){
+
+await fetch("/instantly/send",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+instantlyKey:localStorage.getItem("instantlyKey"),
+to:state.selected.email,
+subject:"Quick question",
+body:state.email
+})
+})
+
+alert("Email sent")
+
+}
+
 </script>
 
 </body>
