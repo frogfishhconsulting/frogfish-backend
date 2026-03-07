@@ -70,7 +70,76 @@ async function generate() {
   document.getElementById("result").textContent =
     data.content?.[0]?.text || JSON.stringify(data,null,2)
 }
+async function scanApollo() {
 
+  const status = document.getElementById("scanStatus")
+  status.textContent = "Scanning Apollo..."
+
+  const industry = document.getElementById("industry").value
+  const title = document.getElementById("title").value
+
+  const res = await fetch("/apollo/search",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json"},
+    body: JSON.stringify({
+      apolloKey: state.keys.apolloKey,
+      page:1,
+      per_page:10,
+      person_titles:[title],
+      q_organization_keyword_tags:[industry],
+      person_locations:["United States"]
+    })
+  })
+
+  const data = await res.json()
+
+  state.leads = data.people || []
+
+  renderLeads()
+
+  status.textContent = state.leads.length + " leads found"
+
+}
+  async function generateEmail(){
+
+  const lead = state.selectedLead
+
+  const res = await fetch("/anthropic/generate",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json"},
+    body: JSON.stringify({
+      anthropicKey: state.keys.anthropicKey,
+      prompt: "Write a short cold email to " + lead.name +
+      " at " + lead.organization?.name +
+      " about improving marketing ROI by connecting CRM revenue data to ad platforms."
+    })
+  })
+
+  const data = await res.json()
+
+  state.generatedEmail = data.content?.[0]?.text || "No response"
+
+  renderLeadDetail()
+
+}
+  async function sendEmail(){
+
+  const lead = state.selectedLead
+
+  await fetch("/instantly/send",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json"},
+    body: JSON.stringify({
+      instantlyKey: state.keys.instantlyKey,
+      to: lead.email,
+      subject: "Quick question",
+      body: state.generatedEmail
+    })
+  })
+
+  alert("Email sent")
+
+}
 </script>
 
 </body>
