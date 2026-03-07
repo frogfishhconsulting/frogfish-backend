@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
-
+const fetch = global.fetch;
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
