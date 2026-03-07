@@ -185,8 +185,14 @@ window.reset=()=>set({campStep:'idle',bulkEmails:{},bulkStatus:{},sendProg:0});
 window.gen=async id=>{const l=S.leads.find(x=>x.id===id);if(l)await doGen(l);};
 window.cp=id=>{navigator.clipboard.writeText(S.emails[id]||S.bulkEmails[id]||'');log('Copied','success');set({});};
 window.set=set;
-draw();
-</script></body></html>`);
+try {
+  draw();
+} catch (e) {
+  document.body.innerHTML =
+    "<pre style='background:black;color:white;padding:20px'>" +
+    (e?.stack || e?.message || e) +
+    "</pre>";
+}</script></body></html>`);
 });
 
 app.post("/apollo/search", async (req, res) => {
