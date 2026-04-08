@@ -51,5 +51,23 @@ app.post("/instantly/send", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post("/apollo/search-enrich", async (req, res) => {
+  const { apolloKey, email, domain, name } = req.body;
+  if (!apolloKey) return res.status(400).json({ error: "Missing Apollo API key" });
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    if (domain) params.append('domain', domain);
+    if (name) params.append('name', name);
+    params.append('reveal_personal_emails', 'false');
+    params.append('reveal_phone_number', 'false');
+    const r = await fetch(`https://api.apollo.io/api/v1/people/match?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': apolloKey },
+    });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Frogfish BD Agent running on port ${PORT}`));
