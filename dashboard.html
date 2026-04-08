@@ -208,8 +208,10 @@ async function doScan(){
 
   if(fresh.length>0){
     set(function(s){return {leads:s.leads.concat(fresh),scanning:false,scanProg:0}});
-    log('Found '+fresh.length+' contacts across '+countUnique(fresh)+' companies - generating emails for review...','success');
-    await generateForReview(fresh);
+    log('Found '+fresh.length+' contacts across '+countUnique(fresh)+' companies - enriching names...','success');
+    var enriched = await enrichNames(fresh);
+    log('Name enrichment complete - generating emails for review...','success');
+    await generateForReview(enriched);
   }else{
     log('No new leads returned','info');
     set({scanning:false,scanProg:0});
@@ -222,6 +224,39 @@ function countUnique(leads){
   return Object.keys(cos).length;
 }
 
+async function enrichNames(leads){
+  // Try to enrich first names via Apollo people/match endpoint
+  var enriched = [];
+  for(var i=0;i<leads.length;i++){
+    var l=leads[i];
+    if(l.firstName && l.firstName !== 'there'){
+      enriched.push(l);
+      continue;
+    }
+    try{
+      var domain = l.email ? l.email.split('@')[1] : '';
+      if(domain && S.keys.apollo){
+        var r = await apiPost('/apollo/search-enrich', {
+          apolloKey: S.keys.apollo,
+          email: l.email,
+          domain: domain,
+          name: l.contact !== 'Unknown' ? l.contact : ''
+        });
+        if(r && r.person && r.person.first_name){
+          l = Object.assign({}, l, {
+            firstName: r.person.first_name,
+            contact: (r.person.first_name + ' ' + (r.person.last_name||'')).trim()
+          });
+          log('Enriched: '+l.firstName+' at '+l.company,'success');
+        }
+      }
+    }catch(e){}
+    enriched.push(l);
+    await new Promise(function(r){setTimeout(r,200)});
+  }
+  return enriched;
+}
+
 async function generateForReview(leads){
   log('Generating '+leads.length+' emails - will appear in Review Queue...','info');
   for(var i=0;i<leads.length;i++){
@@ -229,7 +264,7 @@ async function generateForReview(leads){
     var n=NICHES.filter(function(x){return x.id===l.niche})[0]||NICHES[0];
     set({scanProg:Math.round(70+(i/leads.length)*30)});
     try{
-      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'&&l.contact!='there'?l.contact.split(' ')[0]:null);var greeting=firstName?('Hi '+firstName):'Hi there';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email.\n\nFOLLOW THIS STRUCTURE EXACTLY - output nothing else:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting+',\n\n[1 sentence about '+l.company+' or their industry that shows you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with a real number - law firm: 42% cost per signed case drop, home services: campaign eating 30% of budget with zero closed jobs, multi-location: 28% revenue growth without more spend]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together we build you a custom dashboard so you see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nRULES: Under 150 words. Casual peer-to-peer tone. No exclamation marks. No corporate speak.');
+      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'&&l.contact!='there'?l.contact.split(' ')[0]:null);var greeting=firstName?('Hi '+firstName):'Hi there';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email.\n\nFOLLOW THIS STRUCTURE EXACTLY - output nothing else:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting+',\n\n[1 sentence about '+l.company+' or their industry that shows you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with a real number - law firm: 42% cost per signed case drop, home services: campaign eating 30% of budget with zero closed jobs, multi-location: 28% revenue growth without more spend]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together we build you a custom dashboard so you see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nCRITICAL RULES: 1) Sign off EXACTLY as: Jared\nFrogfish Consulting - never use [Your name] or any placeholder. 2) Open with the exact greeting provided above - never use [Name]. 3) Under 150 words. 4) Casual peer-to-peer tone. 5) No exclamation marks. 6) No corporate speak. 7) No 'Best,' before the signature - just Jared on its own line.');
       var item={id:'rq_'+l.id,leadId:l.id,company:l.company,contact:l.contact,title:l.title,email:l.email,niche:l.niche,location:l.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
       S.reviewQueue=S.reviewQueue.concat([item]);
       log('Email ready for review: '+l.contact+' at '+l.company,'success');
@@ -248,7 +283,7 @@ async function doGen(lead){
   set({genId:lead.id});
   var n=NICHES.filter(function(x){return x.id===lead.niche})[0]||NICHES[0];
   try{
-    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'&&lead.contact!='there'?lead.contact.split(' ')[0]:null);var greeting3=fn?('Hi '+fn):'Hi there';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email to someone at '+lead.company+' ('+lead.title+') in '+lead.location+'.\n\nFOLLOW THIS STRUCTURE EXACTLY:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting3+',\n\n[1 sentence about '+lead.company+' or their industry showing you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with real number]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together, we build you a custom dashboard so you can see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nRULES: Under 150 words. Casual direct tone. No exclamation marks');
+    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'&&lead.contact!='there'?lead.contact.split(' ')[0]:null);var greeting3=fn?('Hi '+fn):'Hi there';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email to someone at '+lead.company+' ('+lead.title+') in '+lead.location+'.\n\nFOLLOW THIS STRUCTURE EXACTLY:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting3+',\n\n[1 sentence about '+lead.company+' or their industry showing you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with real number]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together, we build you a custom dashboard so you can see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nCRITICAL RULES: 1) Sign off EXACTLY as: Jared\nFrogfish Consulting - never use [Your name] or placeholder. 2) Open with the exact greeting above. 3) Under 150 words. 4) Casual peer-to-peer tone. 5) No exclamation marks. 6) No 'Best,' before signature.');
     // Add to review queue instead of sending directly
     var item={id:'rq_'+lead.id+'_'+Date.now(),leadId:lead.id,company:lead.company,contact:lead.contact,title:lead.title,email:lead.email,niche:lead.niche,location:lead.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
     S.reviewQueue=S.reviewQueue.concat([item]);
