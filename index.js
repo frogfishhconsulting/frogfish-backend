@@ -1,13 +1,14 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/", (req, res) => {
-  res.json({ status: "Frogfish BD Agent backend is running 🐸" });
+  res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
 app.post("/apollo/search", async (req, res) => {
