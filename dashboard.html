@@ -185,10 +185,10 @@ async function doScan(){
     set({scanProg:Math.round((i/NICHES.length)*70)});
     log('Querying Apollo for '+n.label+'...','info');
     try{
-      var d=await apiPost('/apollo/search',{apolloKey:S.keys.apollo,page:1,per_page:15,person_titles:n.titles,q_organization_keyword_tags:n.industries,person_locations:['United States'],organization_num_employees_ranges:['10,50','51,200']});
+      var d=await apiPost('/apollo/search',{apolloKey:S.keys.apollo,page:1,per_page:15,person_titles:n.titles,q_organization_keyword_tags:n.industries,person_locations:['United States'],organization_num_employees_ranges:['10,50','51,200'],prospected_by_current_team:['no']});
       if(d.people&&d.people.length>0){
         var mapped=d.people.filter(function(p){return p.email||p.organization}).map(function(p,j){
-          return {id:Date.now()+i*100+j,company:(p.organization&&p.organization.name)||'Unknown',contact:p.name||'Unknown',title:p.title||'Unknown',email:p.email||('contact@'+((p.organization&&p.organization.primary_domain)||'unknown.com')),employees:String((p.organization&&p.organization.estimated_num_employees)||'?'),spend_signal:'Apollo verified',score:scoreP(p),niche:n.id,location:(p.city&&p.state)?(p.city+', '+p.state):'United States'};
+          var fullName=(p.first_name&&p.last_name)?(p.first_name+' '+p.last_name):(p.name||'');var fName=p.first_name||(fullName.split(' ')[0])||'';return {id:Date.now()+i*100+j,company:(p.organization&&p.organization.name)||'Unknown',contact:fullName||'Unknown',firstName:fName,title:p.title||'Unknown',email:p.email||('contact@'+((p.organization&&p.organization.primary_domain)||'unknown.com')),employees:String((p.organization&&p.organization.estimated_num_employees)||'?'),spend_signal:'Apollo verified',score:scoreP(p),niche:n.id,location:(p.city&&p.state)?(p.city+', '+p.state):'United States'};
         });
         all=all.concat(mapped);
         log(n.label+': '+mapped.length+' contacts found','success');
@@ -229,7 +229,7 @@ async function generateForReview(leads){
     var n=NICHES.filter(function(x){return x.id===l.niche})[0]||NICHES[0];
     set({scanProg:Math.round(70+(i/leads.length)*30)});
     try{
-      var firstName=l.contact.split(' ')[0];var body=await ai('Write a cold outreach email from Jared at Frogfish Consulting to '+firstName+' ('+l.title+') at '+l.company+' in '+l.location+'. Company has '+l.employees+' employees. Their pain: '+n.pain+'. Follow all the rules in your instructions exactly. Use their first name ('+firstName+') to open. Pick the ONE most relevant case study. Include the free audit offer and mention the free dashboard bonus. Keep it under 150 words. Format: Subject: [subject line]\n\n[email body]\n\nJared\nFrogfish Consulting\nhttps://calendly.com/frogfishconsulting/discovery');
+      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'?l.contact.split(' ')[0]:'there');var body=await ai('You are Jared from Frogfish Consulting. Write a cold email to '+firstName+' at '+l.company+' ('+l.title+') in '+l.location+'.\n\nRULES YOU MUST FOLLOW:\n1. Open with: Hi '+firstName+',\n2. Casual, direct tone - like a smart friend, not a vendor\n3. Mention something specific about '+l.company+' or their industry\n4. Their problem: '+n.pain+'\n5. Include ONE relevant case study with a specific number (42% cost drop, or 28% revenue growth, or revenue per dollar nearly doubled)\n6. Offer a FREE audit of their digital-to-revenue funnel\n7. Mention they get a FREE custom dashboard if they become a client\n8. CTA: book a quick 20-min call: https://calendly.com/frogfishconsulting/discovery\n9. Sign off: Jared, Frogfish Consulting\n10. Under 150 words total\n\nFormat exactly:\nSubject: [subject line]\n\nHi '+firstName+',\n\n[2-3 short paragraphs]\n\nJared\nFrogfish Consulting\nhttps://calendly.com/frogfishconsulting/discovery');
       var item={id:'rq_'+l.id,leadId:l.id,company:l.company,contact:l.contact,title:l.title,email:l.email,niche:l.niche,location:l.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
       S.reviewQueue=S.reviewQueue.concat([item]);
       log('Email ready for review: '+l.contact+' at '+l.company,'success');
@@ -248,7 +248,7 @@ async function doGen(lead){
   set({genId:lead.id});
   var n=NICHES.filter(function(x){return x.id===lead.niche})[0]||NICHES[0];
   try{
-    var body=await ai('Cold email for: '+lead.company+' | '+lead.contact+', '+lead.title+' | '+lead.location+' | '+lead.employees+' employees | Pain: '+n.pain+'. Under 160 words. Specific opening about their business. Core pain: no revenue visibility from digital spend. ONE case study with specific number. CTA: '+CALENDLY+'. Smart consultant tone. Format: Subject: [subject]\n\n[body]');
+    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'?lead.contact.split(' ')[0]:'there');var body=await ai('You are Jared from Frogfish Consulting. Write a cold email to '+fn+' at '+lead.company+' ('+lead.title+') in '+lead.location+'.\n\nRULES:\n1. Open: Hi '+fn+',\n2. Casual direct tone, peer-to-peer\n3. Reference something specific about '+lead.company+' or their industry\n4. Their problem: '+n.pain+'\n5. ONE case study with a specific number\n6. Offer FREE audit of their digital-to-revenue funnel\n7. Mention free custom dashboard if they become a client\n8. CTA: https://calendly.com/frogfishconsulting/discovery\n9. Sign: Jared, Frogfish Consulting\n10. Under 150 words\n\nFormat: Subject: [subject]\n\nHi '+fn+',\n\n[body]\n\nJared\nFrogfish Consulting\nhttps://calendly.com/frogfishconsulting/discovery');
     // Add to review queue instead of sending directly
     var item={id:'rq_'+lead.id+'_'+Date.now(),leadId:lead.id,company:lead.company,contact:lead.contact,title:lead.title,email:lead.email,niche:lead.niche,location:lead.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
     S.reviewQueue=S.reviewQueue.concat([item]);
@@ -405,7 +405,7 @@ function tReview(){
       '<div class="flex-between mb-12">'+
       '<div>'+
       '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:'+(item.status==='approved'?'#4ade80':item.status==='rejected'?'#f87171':'#c0e8c8')+'">'+item.company+'</div>'+
-      '<div style="font-size:11px;color:#4a7a58;margin-top:2px">'+item.contact+' &middot; '+item.title+' &middot; '+item.email+'</div>'+
+      '<div style="font-size:12px;color:#c0e8c8;margin-top:3px">'+item.contact+'</div><div style="font-size:11px;color:#4ade80;margin-top:2px">'+item.title+'</div><div style="font-size:10px;color:#2d5c3a;margin-top:2px">'+item.email+'</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:12px">'+statusPill+'<span style="font-size:9px;color:#2d5c3a">'+item.generatedAt+'</span></div>'+
       '</div>'+
