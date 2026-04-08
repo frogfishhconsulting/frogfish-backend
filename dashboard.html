@@ -124,7 +124,7 @@ function log(m,c){if(!c)c='info';var t=new Date().toLocaleTimeString('en-US',{ho
 async function ai(prompt){
   var h={'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
   if(S.keys.anthropic)h['x-api-key']=S.keys.anthropic;
-  var r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:h,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:CTX,messages:[{role:'user',content:prompt}]})});
+  var r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:h,body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:CTX,messages:[{role:'user',content:prompt}]})});
   var d=await r.json();
   if(d.error)throw new Error(d.error.message);
   return (d.content&&d.content[0]&&d.content[0].text)||'';
