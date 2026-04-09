@@ -97,7 +97,7 @@ var S = {
   sent: 0, booked: 0,
   scanning: false, scanProg: 0,
   lastError: null,
-  dailyLimit: 10, maxPerCompany: 2,
+  dailyLimit: 2, maxPerCompany: 1,
   log: [
     {t:'09:14 AM', m:'Agent ready - awaiting daily scan', c:'info'},
     {t:'09:15 AM', m:'Settings: 10 companies/day, 2 contacts max per company', c:'info'},
@@ -197,14 +197,16 @@ async function doScan() {
     log('Querying Apollo for '+n.label+'...','info');
     try {
       var d = await apiPost('/apollo/search', {
-        apolloKey: S.keys.apollo, page:1, per_page:15,
+        apolloKey: S.keys.apollo, page:1, per_page:5,
         person_titles: n.titles,
         q_organization_keyword_tags: n.industries,
         person_locations: ['United States'],
-        organization_num_employees_ranges: ['10,50','51,200']
+        organization_num_employees_ranges: ['10,50','51,200'],
+        reveal_personal_emails: true,
+        contact_email_status: ['verified','likely to engage']
       });
       if(d.people && d.people.length>0) {
-        var mapped = d.people.filter(function(p){ return p.email||p.organization; }).map(function(p,j){
+        var mapped = d.people.filter(function(p){ return p.email && p.email.indexOf('unknown.com')===-1; }).map(function(p,j){
           var fn = p.first_name || (p.name ? p.name.split(' ')[0] : '');
           var ln = p.last_name || (p.name ? p.name.split(' ').slice(1).join(' ') : '');
           var fullName = fn && ln ? fn+' '+ln : (p.name||'');
