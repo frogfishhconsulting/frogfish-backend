@@ -75,15 +75,15 @@ app.post("/instantly/send", async (req, res) => {
   const { instantlyKey, to, from, subject, body, replyTo } = req.body;
   if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
-    // Step 1: Get campaigns list using v1 API
-    const campRes = await fetch("https://api.instantly.ai/api/v1/campaign/list?limit=10&skip=0", {
+    // Step 1: Get campaigns list - try both auth methods
+    const campRes = await fetch(`https://api.instantly.ai/api/v1/campaign/list?api_key=${instantlyKey}&limit=10&skip=0`, {
       method: "GET",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${instantlyKey}` }
+      headers: { "Content-Type": "application/json" }
     });
     const campData = await campRes.json();
-    console.log("Campaigns response:", JSON.stringify(campData).slice(0, 200));
+    console.log("Campaigns response:", JSON.stringify(campData).slice(0, 300));
     
-    const campaigns = Array.isArray(campData) ? campData : (campData.data || campData.campaigns || []);
+    const campaigns = Array.isArray(campData) ? campData : (campData.data || campData.campaigns || campData.items || []);
     
     if(campaigns.length > 0) {
       // Step 2: Add lead to first active campaign
@@ -92,11 +92,13 @@ app.post("/instantly/send", async (req, res) => {
       
       const leadRes = await fetch("https://api.instantly.ai/api/v1/lead/add", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${instantlyKey}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          api_key: instantlyKey,
           campaign_id: campaignId,
           email: to,
           first_name: to.split('@')[0],
+          last_name: '',
           custom_variables: {
             subject: subject,
             email_body: body
