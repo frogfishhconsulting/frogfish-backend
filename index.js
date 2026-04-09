@@ -70,25 +70,39 @@ app.post("/research/company", async (req, res) => {
   }
 });
 
-// Send via Gmail using nodemailer
-app.post("/send/gmail", async (req, res) => {
-  const { gmailUser, gmailPass, to, subject, body } = req.body;
-  if (!gmailUser || !gmailPass) return res.status(400).json({ error: "Missing Gmail credentials" });
+app.post("/instantly/send", async (req, res) => {
+  const { instantlyKey, to, subject, body } = req.body;
+  if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
-    const nodemailer = require("nodemailer");
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user: gmailUser, pass: gmailPass }
+    // Get campaigns
+    const campRes = await fetch(`https://api.instantly.ai/api/v1/campaign/list?api_key=${instantlyKey}&limit=10&skip=0`);
+    const campaigns = await campRes.json();
+    console.log("Campaigns:", JSON.stringify(campaigns).slice(0, 200));
+    
+    const campList = Array.isArray(campaigns) ? campaigns : (campaigns.data || campaigns.campaigns || []);
+    if (!campList.length) return res.json({ error: "No campaigns found in Instantly" });
+    
+    const campaignId = campList[0].id;
+    
+    // Add lead to campaign
+    const leadRes = await fetch("https://api.instantly.ai/api/v1/lead/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: instantlyKey,
+        campaign_id: campaignId,
+        email: to,
+        personalization: body,
+        custom_variables: { subject }
+      })
     });
-    await transporter.sendMail({
-      from: `"Jared Flanders - Frogfish Consulting" <${gmailUser}>`,
-      to, subject,
-      text: body,
-      replyTo: gmailUser
-    });
-    res.json({ success: true });
+    const leadData = await leadRes.json();
+    console.log("Lead add:", JSON.stringify(leadData).slice(0, 200));
+    
+    if (leadData.status === 'error' || leadData.error) {
+      return res.json({ error: leadData.message || leadData.error || JSON.stringify(leadData) });
+    }
+    res.json({ success: true, data: leadData });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
