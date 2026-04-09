@@ -74,17 +74,34 @@ app.post("/instantly/send", async (req, res) => {
   const { instantlyKey, to, subject, body } = req.body;
   if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
-    // Get campaigns
-    const campRes = await fetch(`https://api.instantly.ai/api/v1/campaign/list?api_key=${instantlyKey}&limit=10&skip=0`);
-    const campaigns = await campRes.json();
-    console.log("Campaigns:", JSON.stringify(campaigns).slice(0, 200));
-    
-    const campList = Array.isArray(campaigns) ? campaigns : (campaigns.data || campaigns.campaigns || []);
-    if (!campList.length) return res.json({ error: "No campaigns found in Instantly" });
-    
-    const campaignId = campList[0].id;
-    
-    // Add lead to campaign
+    // Try v2 API first
+    const campRes = await fetch("https://api.instantly.ai/api/v2/campaigns?limit=10&status=1", {
+      headers: { "Authorization": `Bearer ${instantlyKey}` }
+    });
+    const campData = await campRes.json();
+    console.log("v2 campaigns raw:", JSON.stringify(campData).slice(0, 300));
+
+    let campaignId = null;
+    if (campData.items && campData.items.length > 0) {
+      campaignId = campData.items[0].id;
+    } else if (Array.isArray(campData) && campData.length > 0) {
+      campaignId = campData[0].id;
+    }
+
+    // If v2 failed, try v1
+    if (!campaignId) {
+      const v1Res = await fetch(`https://api.instantly.ai/api/v1/campaign/list?api_key=${instantlyKey}&limit=10&skip=0`);
+      const v1Data = await v1Res.json();
+      console.log("v1 campaigns raw:", JSON.stringify(v1Data).slice(0, 300));
+      const v1List = Array.isArray(v1Data) ? v1Data : (v1Data.data || v1Data.campaigns || []);
+      if (v1List.length > 0) campaignId = v1List[0].id;
+    }
+
+    if (!campaignId) {
+      return res.json({ error: "No campaigns found. Raw response logged to Railway." });
+    }
+
+    // Add lead via v1 API
     const leadRes = await fetch("https://api.instantly.ai/api/v1/lead/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -97,13 +114,14 @@ app.post("/instantly/send", async (req, res) => {
       })
     });
     const leadData = await leadRes.json();
-    console.log("Lead add:", JSON.stringify(leadData).slice(0, 200));
-    
+    console.log("Lead add response:", JSON.stringify(leadData).slice(0, 300));
+
     if (leadData.status === 'error' || leadData.error) {
       return res.json({ error: leadData.message || leadData.error || JSON.stringify(leadData) });
     }
-    res.json({ success: true, data: leadData });
+    res.json({ success: true, campaign: campaignId });
   } catch (e) {
+    console.error("Instantly error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
