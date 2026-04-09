@@ -212,7 +212,7 @@ function applyDailyLimits(leads) {
   return result;
 }
 
-function makePrompt(company, title, location, pain, niche) {
+function makePrompt(company, title, location, pain, niche, websiteContext) {
   var cs = niche==='legal'
     ? 'We worked with a law firm that restructured their campaigns around CRM closed case data instead of form fills. Cost per signed case dropped 42% in 4 months.'
     : niche==='home'
@@ -223,10 +223,15 @@ function makePrompt(company, title, location, pain, niche) {
     ? 'Before starting Frogfish, our team spent 10 years at Google working directly on lead gen for businesses like yours. We saw firsthand how the algorithm optimizes for volume, not quality. '
     : 'Our team came from 10 years at Google running lead gen for service businesses. We know exactly how the platform thinks - and it is not thinking about your bottom line. ';
 
+  var contextNote = websiteContext && websiteContext.length > 50
+    ? 'IMPORTANT CONTEXT about ' + company + ' from their website - use this to make paragraph 1 specific and accurate, reference what they actually do: ' + websiteContext.slice(0, 800) + '. '
+    : '';
+
   return 'Write the body of a short cold outreach email (under 140 words, 3 paragraphs). '
     + 'You are writing on behalf of Jared at Frogfish Consulting. '
+    + contextNote
     + 'Company: ' + company + ' (' + title + ', ' + location + '). '
-    + 'Paragraph 1: One specific sentence about ' + company + ' or their industry that shows you know their world. Then naturally work in this credibility: ' + googleCred
+    + 'Paragraph 1: One specific accurate sentence about what ' + company + ' actually does and their industry - use the website context above to be precise, not generic. Then naturally work in this credibility: ' + googleCred
     + 'Paragraph 2: Their problem - ' + pain + '. Keep it direct and specific. '
     + 'Paragraph 3: ' + cs + ' Offer a complimentary audit of their digital-to-revenue funnel - no cost, no pitch, just show them where the gaps are. If they become a client, Frogfish builds them a custom dashboard at no extra cost. '
     + 'Casual peer-to-peer tone. Confident but not arrogant. No corporate speak. No exclamation marks. '
@@ -293,6 +298,19 @@ async function doScan() {
   }
 }
 
+async function researchCompany(domain) {
+  if(!domain || domain === 'unknown.com') return '';
+  try {
+    var r = await fetch('/research/company', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({domain: domain})
+    });
+    var d = await r.json();
+    return d.text || '';
+  } catch(e) { return ''; }
+}
+
 async function generateEmails(leads) {
   log('Generating '+leads.length+' emails...','info');
   for(var i=0;i<leads.length;i++) {
@@ -300,8 +318,15 @@ async function generateEmails(leads) {
     var n = NICHES.filter(function(x){ return x.id===l.niche; })[0]||NICHES[0];
     set({scanProg:Math.round(70+(i/leads.length)*30)});
     try {
+      // Research company website first
+      var websiteText = '';
+      if(l.email) {
+        var domain = l.email.split('@')[1];
+        log('Researching '+domain+'...','info');
+        websiteText = await researchCompany(domain);
+      }
       var greeting = l.firstName ? 'Hi '+l.firstName+',' : 'Hi,';
-      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche);
+      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText);
       var rawBody = await callAI(prompt);
       var cleanedBody = cleanBody(rawBody);
       var subject = 'Quick question - '+l.company;
@@ -337,8 +362,14 @@ async function genSingle(lead) {
   var n = NICHES.filter(function(x){ return x.id===lead.niche; })[0]||NICHES[0];
   try {
     log('Generating email for '+lead.company+'...','info');
+    var websiteText2 = '';
+    if(lead.email) {
+      var dom = lead.email.split('@')[1];
+      log('Researching '+dom+'...','info');
+      websiteText2 = await researchCompany(dom);
+    }
     var greeting = lead.firstName ? 'Hi '+lead.firstName+',' : 'Hi,';
-    var prompt = makePrompt(lead.company, lead.title, lead.location, n.pain, lead.niche);
+    var prompt = makePrompt(lead.company, lead.title, lead.location, n.pain, lead.niche, websiteText2);
     var rawBody = await callAI(prompt);
     var cleanedBody = cleanBody(rawBody);
     var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
