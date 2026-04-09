@@ -445,21 +445,20 @@ async function approveEmail(id) {
   var subject = lines[0].replace('Subject: ','').trim();
   var emailBody = lines.slice(2).join('\n').trim();
 
-  // Send via Gmail
-  if(!S.keys.gmailUser || !S.keys.gmailPass) {
-    var errMsg = 'Gmail not configured - add Gmail address and App Password in Settings';
+  // Send via Instantly
+  if(!S.keys.instantly) {
+    var errMsg = 'Instantly not configured - add API key in Settings';
     log(errMsg,'error');
     S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'failed',sendError:errMsg}) : x; });
     set({});
     return;
   }
   try {
-    var r = await fetch('/send/gmail', {
+    var r = await fetch('/instantly/send', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        gmailUser: S.keys.gmailUser,
-        gmailPass: S.keys.gmailPass,
+        instantlyKey: S.keys.instantly,
         to: item.email,
         subject: subject,
         body: emailBody
@@ -467,15 +466,15 @@ async function approveEmail(id) {
     });
     var result = await r.json();
     if(result.error) {
-      var errMsg = result.error;
+      var errMsg = typeof result.error === 'object' ? JSON.stringify(result.error) : result.error;
       log('Send failed: '+errMsg,'error');
       S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'failed',sendError:errMsg}) : x; });
       set({});
       return;
     }
-    log('Sent to '+item.email+' via Gmail','success');
+    log('Sent to '+item.email+' via Instantly','success');
   } catch(e) {
-    log('Gmail error: '+e.message,'error');
+    log('Instantly error: '+e.message,'error');
     S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'failed',sendError:e.message}) : x; });
     set({});
     return;
@@ -633,8 +632,7 @@ function pageSettings() {
     +'<div class="grid-3 mb-16">'
     +[{id:'anthropic',label:'Anthropic',ph:'sk-ant-...',hint:'console.anthropic.com'},
       {id:'apollo',label:'Apollo.io',ph:'service_...',hint:'app.apollo.io - Settings - API'},
-      {id:'gmailUser',label:'Gmail Address',ph:'jared@frogfishconsulting.com',hint:'Your Google Workspace email address'},
-      {id:'gmailPass',label:'Gmail App Password',ph:'xxxx xxxx xxxx xxxx',hint:'Google Account - Security - App Passwords'}
+      {id:'instantly',label:'Instantly.ai',ph:'inst_...',hint:'app.instantly.ai - Settings - API'}
     ].map(function(k){
       var s = ks(k.id);
       return '<div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><div class="label">'+k.label+'</div><div style="font-size:9px;color:'+s.c+'">'+s.l+'</div></div>'
@@ -651,7 +649,7 @@ function pageSettings() {
     +'<div class="card"><div class="label" style="color:#4ade80;margin-bottom:12px">Setup Checklist</div>'
     +[{n:'01',t:'Anthropic API',d:'console.anthropic.com',done:!!S.keys.anthropic},
       {n:'02',t:'Apollo.io Basic',d:'API access enabled',done:!!S.keys.apollo},
-      {n:'03',t:'Gmail App Password',d:'Google Account - Security - App Passwords',done:!!S.keys.gmailPass},
+      {n:'03',t:'Instantly Connected',d:'IMAP enabled + inbox warming',done:!!S.keys.instantly},
       {n:'04',t:'Railway Backend',d:'Live at railway.app',done:true}
     ].map(function(i){
       return '<div style="background:#060c08;border:1px solid '+(i.done?'#1a5c2e':'#1a3320')+';padding:12px;border-radius:2px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'
