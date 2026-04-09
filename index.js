@@ -108,5 +108,21 @@ app.post("/instantly/send", async (req, res) => {
   }
 });
 
+// Instantly webhook receiver - tracks opens, clicks, replies
+app.post("/webhook/instantly", async (req, res) => {
+  const event = req.body;
+  console.log("Instantly webhook:", JSON.stringify(event).slice(0, 300));
+  // Store event for dashboard to poll
+  if (!global.webhookEvents) global.webhookEvents = [];
+  global.webhookEvents.unshift({ ...event, receivedAt: new Date().toISOString() });
+  global.webhookEvents = global.webhookEvents.slice(0, 100); // keep last 100
+  res.json({ received: true });
+});
+
+// Dashboard polls this to get latest analytics events
+app.get("/webhook/events", (req, res) => {
+  res.json(global.webhookEvents || []);
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Frogfish BD Agent running on port ${PORT}`));
