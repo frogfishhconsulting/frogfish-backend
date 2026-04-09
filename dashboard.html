@@ -205,7 +205,7 @@ async function doScan() {
         reveal_personal_emails: true
       });
       if(d.people && d.people.length>0) {
-        var mapped = d.people.filter(function(p){ return p.email || p.organization; }).map(function(p,j){
+        var mapped = d.people.filter(function(p){ return p.email && p.email.indexOf('unknown')===-1; }).map(function(p,j){
           var fn = p.first_name || (p.name ? p.name.split(' ')[0] : '');
           var ln = p.last_name || (p.name ? p.name.split(' ').slice(1).join(' ') : '');
           var fullName = fn && ln ? fn+' '+ln : (p.name||'');
