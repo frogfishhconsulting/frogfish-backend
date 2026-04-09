@@ -214,10 +214,10 @@ function applyDailyLimits(leads) {
 
 function makePrompt(company, title, location, pain, niche, websiteContext) {
   var cs = niche==='legal'
-    ? 'We worked with a law firm that restructured their campaigns around CRM closed case data instead of form fills. Cost per signed case dropped 42% in 4 months.'
+    ? 'We worked with a firm in a similar position - restructured their campaigns around CRM closed case data instead of form fills. Cost per signed case dropped 42% in 4 months.'
     : niche==='home'
-    ? 'We worked with a home services company where one campaign was eating 30% of their budget with zero closed jobs. We cut it and their revenue per marketing dollar nearly doubled.'
-    : 'We helped a similar company connect their CRM to their campaigns and grew revenue 28% without increasing their ad spend.';
+    ? 'We worked with a company in a similar space - one campaign was eating 30% of their budget with zero closed jobs. We cut it and their revenue per marketing dollar nearly doubled.'
+    : 'We helped a company in a comparable position connect their CRM to their campaigns and grew revenue 28% without increasing their ad spend.';
 
   var googleCred = niche==='legal' || niche==='financial'
     ? 'Before starting Frogfish, our team spent 10 years at Google working directly on lead gen for businesses like yours. We saw firsthand how the algorithm optimizes for volume, not quality. '
