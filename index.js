@@ -15,13 +15,46 @@ app.post("/apollo/search", async (req, res) => {
   const { apolloKey, ...params } = req.body;
   if (!apolloKey) return res.status(400).json({ error: "Missing Apollo API key" });
   try {
-    const r = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
+    // Step 1: Search for people
+    const searchRes = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": apolloKey },
       body: JSON.stringify(params),
     });
-    const data = await r.json();
-    res.json(data);
+    const searchData = await searchRes.json();
+    
+    if (!searchData.people || searchData.people.length === 0) {
+      return res.json(searchData);
+    }
+
+    // Step 2: Enrich each person to get their email
+    const enriched = await Promise.all(searchData.people.map(async (person) => {
+      if (person.email) return person; // already has email
+      try {
+        const enrichParams = new URLSearchParams();
+        if (person.id) enrichParams.append('id', person.id);
+        if (person.first_name) enrichParams.append('first_name', person.first_name);
+        if (person.last_name) enrichParams.append('last_name', person.last_name);
+        if (person.organization_id) enrichParams.append('organization_id', person.organization_id);
+        if (person.organization && person.organization.primary_domain) {
+          enrichParams.append('domain', person.organization.primary_domain);
+        }
+        enrichParams.append('reveal_personal_emails', 'false');
+        enrichParams.append('reveal_phone_number', 'false');
+        
+        const enrichRes = await fetch("https://api.apollo.io/api/v1/people/match?" + enrichParams.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": apolloKey },
+        });
+        const enrichData = await enrichRes.json();
+        if (enrichData.person && enrichData.person.email) {
+          return { ...person, email: enrichData.person.email, first_name: enrichData.person.first_name || person.first_name, last_name: enrichData.person.last_name || person.last_name };
+        }
+      } catch(e) { /* enrichment failed, return person as-is */ }
+      return person;
+    }));
+
+    res.json({ ...searchData, people: enriched });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
