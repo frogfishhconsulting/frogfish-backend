@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const nodemailer = require("nodemailer");
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
 
 const app = express();
@@ -71,24 +70,25 @@ app.post("/research/company", async (req, res) => {
   }
 });
 
-// Gmail SMTP send
+// Send via Gmail using nodemailer
 app.post("/send/gmail", async (req, res) => {
   const { gmailUser, gmailPass, to, subject, body } = req.body;
   if (!gmailUser || !gmailPass) return res.status(400).json({ error: "Missing Gmail credentials" });
-  if (!to || !subject || !body) return res.status(400).json({ error: "Missing to, subject, or body" });
   try {
+    const nodemailer = require("nodemailer");
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: { user: gmailUser, pass: gmailPass }
     });
     await transporter.sendMail({
       from: `"Jared Flanders - Frogfish Consulting" <${gmailUser}>`,
-      to: to,
-      subject: subject,
+      to, subject,
       text: body,
       replyTo: gmailUser
     });
-    res.json({ success: true, message: `Email sent to ${to}` });
+    res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
