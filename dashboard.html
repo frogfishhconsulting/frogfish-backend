@@ -147,12 +147,55 @@ async function apiPost(path, body) {
 }
 
 function scoreP(p) {
-  var s = 60;
+  var s = 50;
   var t = (p.title||'').toLowerCase();
-  if(['cmo','vp','director','head','partner','owner','ceo'].some(function(x){ return t.indexOf(x)>=0; })) s+=15;
-  if(p.email) s+=10;
-  if(((p.organization&&p.organization.estimated_num_employees)||0)>20) s+=8;
-  return Math.min(s+Math.floor(Math.random()*8), 99);
+  var org = p.organization || {};
+  var employees = org.estimated_num_employees || 0;
+  var industry = (org.industry||'').toLowerCase();
+  var keywords = (org.keywords||[]).join(' ').toLowerCase();
+  var technologies = (p.technologies||org.current_technologies||[]).map(function(x){ return (x.name||x||'').toLowerCase(); }).join(' ');
+
+  // Title seniority - decision maker weight
+  if(['ceo','founder','owner','managing partner','president'].some(function(x){ return t.indexOf(x)>=0; })) s+=20;
+  else if(['cmo','vp','vice president','chief marketing'].some(function(x){ return t.indexOf(x)>=0; })) s+=17;
+  else if(['director','head of','partner'].some(function(x){ return t.indexOf(x)>=0; })) s+=13;
+  else if(['manager','lead','specialist'].some(function(x){ return t.indexOf(x)>=0; })) s+=6;
+
+  // Verified email
+  if(p.email && p.email.indexOf('unknown')===-1) s+=10;
+
+  // Company size - sweet spot is 20-500 employees
+  if(employees>=200) s+=12;
+  else if(employees>=50) s+=10;
+  else if(employees>=20) s+=7;
+  else if(employees>=5) s+=3;
+
+  // Google Ads / paid media signals from technologies and keywords
+  if(technologies.indexOf('google ads')>=0 || technologies.indexOf('google adwords')>=0) s+=15;
+  else if(technologies.indexOf('google tag manager')>=0 || technologies.indexOf('google analytics')>=0) s+=8;
+  if(technologies.indexOf('facebook ads')>=0 || technologies.indexOf('meta ads')>=0) s+=8;
+  if(technologies.indexOf('hubspot')>=0 || technologies.indexOf('salesforce')>=0 || technologies.indexOf('crm')>=0) s+=10;
+
+  // Keywords suggesting active digital marketing
+  if(keywords.indexOf('lead generation')>=0 || keywords.indexOf('digital marketing')>=0) s+=8;
+  if(keywords.indexOf('paid search')>=0 || keywords.indexOf('ppc')>=0 || keywords.indexOf('sem')>=0) s+=10;
+  if(keywords.indexOf('google ads')>=0 || keywords.indexOf('adwords')>=0) s+=8;
+
+  // Industry fit - high value industries
+  if(industry.indexOf('legal')>=0 || industry.indexOf('law')>=0) s+=8;
+  if(industry.indexOf('insurance')>=0 || industry.indexOf('financial')>=0) s+=7;
+  if(industry.indexOf('hvac')>=0 || industry.indexOf('roofing')>=0 || industry.indexOf('plumbing')>=0 || industry.indexOf('home services')>=0) s+=7;
+  if(industry.indexOf('solar')>=0 || industry.indexOf('real estate')>=0) s+=6;
+
+  // Revenue signals - if Apollo has annual revenue data
+  var revenue = org.annual_revenue_printed || org.annual_revenue || 0;
+  if(typeof revenue === 'string') {
+    if(revenue.indexOf('M')>=0) s+=10;
+    else if(revenue.indexOf('K')>=0) s+=5;
+  } else if(revenue > 1000000) s+=10;
+  else if(revenue > 500000) s+=6;
+
+  return Math.min(s, 99);
 }
 
 function applyDailyLimits(leads) {
@@ -185,7 +228,7 @@ function makePrompt(company, title, location, pain, niche) {
     + 'Company: ' + company + ' (' + title + ', ' + location + '). '
     + 'Paragraph 1: One specific sentence about ' + company + ' or their industry that shows you know their world. Then naturally work in this credibility: ' + googleCred
     + 'Paragraph 2: Their problem - ' + pain + '. Keep it direct and specific. '
-    + 'Paragraph 3: ' + cs + ' Offer a free audit of their digital-to-revenue funnel. If they work with Frogfish, they also get a free custom dashboard. '
+    + 'Paragraph 3: ' + cs + ' Offer a complimentary audit of their digital-to-revenue funnel - no cost, no pitch, just show them where the gaps are. If they become a client, Frogfish builds them a custom dashboard at no extra cost. '
     + 'Casual peer-to-peer tone. Confident but not arrogant. No corporate speak. No exclamation marks. '
     + 'OUTPUT THE 3 PARAGRAPHS ONLY. Do not write a greeting line. Do not write a signature. Do not write a subject line. Do not include a Calendly link. Just the 3 paragraphs.';
 }
@@ -322,16 +365,57 @@ async function genSingle(lead) {
   }
 }
 
-function approveEmail(id) {
+async function approveEmail(id) {
   var item = S.reviewQueue.filter(function(x){ return x.id===id; })[0];
+  if(!item) return;
   if(S.editingId===id) {
     var ta = document.getElementById('edit_'+id);
-    if(ta && item) item.body = ta.value;
+    if(ta) item.body = ta.value;
   }
+  S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'sending'}) : x; });
+  set({});
+
+  // Extract subject and body
+  var lines = item.body.split('\n');
+  var subject = lines[0].replace('Subject: ','').trim();
+  var emailBody = lines.slice(2).join('\n').trim();
+
+  // Send via Instantly if key is set
+  if(S.keys.instantly) {
+    try {
+      var r = await fetch('/instantly/send', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          instantlyKey: S.keys.instantly,
+          to: item.email,
+          from: 'jared@frogfishconsulting.com',
+          subject: subject,
+          body: emailBody,
+          replyTo: 'jared@frogfishconsulting.com'
+        })
+      });
+      var result = await r.json();
+      if(result.error) {
+        log('Send error: '+result.error+' - check Instantly setup','error');
+        S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'pending'}) : x; });
+        set({});
+        return;
+      }
+      log('Sent to '+item.email+' via Instantly','success');
+    } catch(e) {
+      log('Instantly error: '+e.message,'error');
+      S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'pending'}) : x; });
+      set({});
+      return;
+    }
+  } else {
+    log('No Instantly key - add it in Settings to send for real','info');
+  }
+
   S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'approved'}) : x; });
   S.editingId = null;
   S.sent = S.sent+1;
-  if(item) log('Approved + sent to '+item.email,'success');
   set({});
 }
 
@@ -342,12 +426,14 @@ function rejectEmail(id) {
   set({});
 }
 
-function approveAll() {
+async function approveAll() {
   var pending = S.reviewQueue.filter(function(x){ return x.status==='pending'; });
-  S.reviewQueue = S.reviewQueue.map(function(x){ return x.status==='pending' ? Object.assign({},x,{status:'approved'}) : x; });
-  S.sent = S.sent + pending.length;
-  log('Approved all '+pending.length+' emails','success');
-  set({});
+  log('Sending '+pending.length+' emails...','info');
+  for(var i=0;i<pending.length;i++) {
+    await approveEmail(pending[i].id);
+    await new Promise(function(r){ setTimeout(r,500); });
+  }
+  log('All done - '+pending.length+' emails processed','success');
 }
 
 function saveKeys() {
