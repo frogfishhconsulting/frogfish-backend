@@ -66,6 +66,7 @@ input:focus{border-color:#4ade80}
 .pill-pending{background:#1a3320;color:#4a7a58;border:1px solid #2d5c3a}
 .pill-approved{background:#0a2a10;color:#4ade80;border:1px solid #4ade80}
 .pill-rejected{background:#2a0a0a;color:#f87171;border:1px solid #f87171}
+.pill-failed{background:#2a0a0a;color:#fbbf24;border:1px solid #fbbf24}
 </style>
 </head>
 <body>
@@ -461,20 +462,24 @@ async function approveEmail(id) {
       });
       var result = await r.json();
       if(result.error) {
-        log('Send error: '+result.error+' - check Instantly setup','error');
-        S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'pending'}) : x; });
+        var errMsg = typeof result.error === 'object' ? JSON.stringify(result.error) : result.error;
+        log('Send failed for '+item.email+': '+errMsg,'error');
+        S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'failed',sendError:errMsg}) : x; });
         set({});
         return;
       }
       log('Sent to '+item.email+' via Instantly','success');
     } catch(e) {
-      log('Instantly error: '+e.message,'error');
-      S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'pending'}) : x; });
+      log('Instantly connection error: '+e.message,'error');
+      S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'failed',sendError:e.message}) : x; });
       set({});
       return;
     }
   } else {
-    log('No Instantly key - add it in Settings to send for real','info');
+    log('No Instantly key — add it in Settings to send for real','info');
+    S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'failed',sendError:'No Instantly API key set'}) : x; });
+    set({});
+    return;
   }
 
   S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'approved'}) : x; });
@@ -561,7 +566,11 @@ function pageReview() {
     var lines = item.body.split('\n');
     var subjectLine = lines[0].replace('Subject: ','');
     var emailBody = lines.slice(2).join('\n');
-    var pill = item.status==='pending'?'<span class="status-pill pill-pending">Pending Review</span>':item.status==='approved'?'<span class="status-pill pill-approved">&#10003; Approved</span>':'<span class="status-pill pill-rejected">&#10007; Rejected</span>';
+    var pill = item.status==='pending'?'<span class="status-pill pill-pending">Pending Review</span>':
+    item.status==='sending'?'<span class="status-pill pill-pending"><span class="pulse">&#9679;</span> Sending...</span>':
+    item.status==='approved'?'<span class="status-pill pill-approved">&#10003; Sent</span>':
+    item.status==='failed'?'<span class="status-pill pill-failed">&#9888; Send Failed</span>':
+    '<span class="status-pill pill-rejected">&#10007; Rejected</span>';
     var actions = item.status==='pending' ? '<div style="display:flex;gap:8px;flex-wrap:wrap">'
       +(isEditing
         ?'<button class="btn-approve" onclick="saveEdit(\''+item.id+'\')">Save</button><button class="btn-ghost btn-sm" onclick="set({editingId:null})">Cancel</button>'
@@ -579,7 +588,7 @@ function pageReview() {
         ?'<div style="margin-bottom:12px"><textarea id="edit_'+item.id+'" class="email-edit">'+item.body+'</textarea></div>'
         :'<div class="email-box" style="max-height:200px;margin-bottom:12px;font-size:11px">'+emailBody+'</div>'
       )
-      +actions+'</div>';
+      +errorBox+actions+'</div>';
   }).join('');
   return summary+cards;
 }
@@ -655,6 +664,12 @@ function pageSettings() {
 window.toggleVariant = function(id, v) {
   S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{activeVariant:v}) : x; });
   set({});
+};
+
+window.retryEmail = async function(id) {
+  S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'pending',sendError:null}) : x; });
+  set({});
+  await approveEmail(id);
 };
 
 function saveEdit(id) {
