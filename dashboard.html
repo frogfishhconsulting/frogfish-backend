@@ -95,7 +95,7 @@ var S = {
   selLead: null,
   reviewQueue: [],
   editingId: null,
-  sent: 0, booked: 0,
+  sent: 0, booked: 0, variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
   dailyLimit: 2, maxPerCompany: 1,
@@ -108,10 +108,31 @@ var S = {
   showK: {}, keySaved: false
 };
 
+// Restore persisted state
+(function(){
+  try {
+    var savedLeads = localStorage.getItem('ff_leads');
+    var savedQueue = localStorage.getItem('ff_queue');
+    var savedSent = localStorage.getItem('ff_sent');
+    if(savedLeads) S.leads = JSON.parse(savedLeads);
+    if(savedQueue) S.reviewQueue = JSON.parse(savedQueue);
+    if(savedSent) S.sent = JSON.parse(savedSent);
+  } catch(e) {}
+})();
+
 var sendTimer = null;
 var LC = {info:'#7dd3fc', success:'#86efac', meeting:'#fbbf24', reply:'#c4b5fd', error:'#f87171'};
 
-function set(p){ Object.assign(S, typeof p==='function' ? p(S) : p); draw(); }
+function set(p){ 
+  Object.assign(S, typeof p==='function' ? p(S) : p); 
+  // Persist leads and reviewQueue to localStorage
+  try {
+    localStorage.setItem('ff_leads', JSON.stringify(S.leads));
+    localStorage.setItem('ff_queue', JSON.stringify(S.reviewQueue));
+    localStorage.setItem('ff_sent', JSON.stringify(S.sent));
+  } catch(e) {}
+  draw(); 
+}
 function log(m,c){ if(!c)c='info'; var t=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); S.log=[{t:t,m:m,c:c}].concat(S.log).slice(0,60); }
 
 function buildEmail(greeting, bodyText, company) {
@@ -213,7 +234,7 @@ function applyDailyLimits(leads) {
   return result;
 }
 
-function makePrompt(company, title, location, pain, niche, websiteContext) {
+function makePrompt(company, title, location, pain, niche, websiteContext, variant) {
   var cs = niche==='legal'
     ? 'We worked with a firm in a similar position - restructured their campaigns around CRM closed case data instead of form fills. Cost per signed case dropped 42% in 4 months.'
     : niche==='home'
@@ -225,18 +246,57 @@ function makePrompt(company, title, location, pain, niche, websiteContext) {
     : 'Our team came from 10 years at Google running lead gen for service businesses. We know exactly how the platform thinks - and it is not thinking about your bottom line. ';
 
   var contextNote = websiteContext && websiteContext.length > 50
-    ? 'RESEARCH about ' + company + ' from their website: ' + websiteContext.slice(0, 800) + '. USE THIS RESEARCH to write a hyper-specific opening that connects what they do to the problem we solve. Do NOT just summarize what they do back to them - that is lazy. Instead, use what you know about their business to identify the SPECIFIC version of the problem they likely face. For example, if they are a transportation law firm, do not say they serve transportation companies - say something like their practice area generates high inquiry volume from compliance and accident cases with wildly different conversion rates, making it nearly impossible to know which ad campaigns actually drive signed retainers. That is how you use research. '
+    ? 'RESEARCH about ' + company + ' from their website: ' + websiteContext.slice(0, 800) + '. USE THIS RESEARCH to write a hyper-specific opening that connects what they do to the problem we solve. Do NOT just summarize what they do back to them. Use what you know to identify the SPECIFIC version of the problem they likely face - something that makes them think "how did they know that?" '
     : '';
 
+  var offer = 'Frogfish works the first month free. No retainer, no contract. We connect their data, show them exactly where their ad spend is leaking, and prove bottom line impact. If we cannot show something worth paying for, they owe nothing.';
+
+  if(variant === 'B') {
+    // Warm intro opener - shorter, punchier, implies familiarity
+    return 'Write a SHORT cold outreach email body (under 100 words, 2-3 short paragraphs). '
+      + 'You are writing on behalf of Jared at Frogfish Consulting. '
+      + 'Company: ' + company + ' (' + title + ', ' + location + '). '
+      + 'Open with: "I tried reaching out through your website but wanted to make sure this got to the right person directly." '
+      + 'Then one sentence on their core problem: ' + pain + '. '
+      + 'Then the offer: ' + offer + ' '
+      + 'Casual, direct, minimal. No case study needed. Just the problem and the offer. '
+      + 'OUTPUT BODY PARAGRAPHS ONLY. No greeting. No signature. No subject line. No Calendly link.';
+  }
+
+  if(variant === 'C') {
+    // Direct ROI opener - lead with the number, skip the research
+    return 'Write a cold outreach email body (under 120 words, 3 paragraphs). '
+      + 'You are writing on behalf of Jared at Frogfish Consulting. '
+      + 'Company: ' + company + ' (' + title + ', ' + location + '). '
+      + 'Open with a bold ROI statement like: "Businesses in your space typically find 20-40% of their ad budget going to leads that never convert - the algorithm has no idea which ones close and which ones waste intake time." '
+      + 'Paragraph 2: ' + googleCred + 'We built Frogfish specifically to fix the gap between digital spend and offline revenue. '
+      + 'Paragraph 3: ' + cs + ' ' + offer + ' '
+      + 'Punchy. Data-driven tone. No fluff. '
+      + 'OUTPUT BODY PARAGRAPHS ONLY. No greeting. No signature. No subject line. No Calendly link.';
+  }
+
+  if(variant === 'D') {
+    // Referral-flavored - soft warm intro implying prior contact
+    return 'Write a cold outreach email body (under 120 words, 3 paragraphs). '
+      + 'You are writing on behalf of Jared at Frogfish Consulting. '
+      + 'Company: ' + company + ' (' + title + ', ' + location + '). '
+      + 'Open with something like: "I spoke with someone at your office recently - they suggested I reach out to you directly about your digital marketing." Keep it vague and natural, do not invent a specific name. '
+      + 'Paragraph 2: Their problem - ' + pain + '. One or two sentences, specific to their industry. '
+      + 'Paragraph 3: ' + cs + ' ' + offer + ' '
+      + 'Warm, personal tone. Like a peer reaching out after a real conversation. '
+      + 'OUTPUT BODY PARAGRAPHS ONLY. No greeting. No signature. No subject line. No Calendly link.';
+  }
+
+  // Variant A - default (research-heavy, Google credibility)
   return 'Write the body of a short cold outreach email (under 140 words, 3 paragraphs). '
     + 'You are writing on behalf of Jared at Frogfish Consulting. '
     + contextNote
     + 'Company: ' + company + ' (' + title + ', ' + location + '). '
-    + 'Paragraph 1: Use the research above to open with a razor-sharp observation about the SPECIFIC challenge their type of business faces with digital lead gen - something that makes them think "how did they know that?" Do NOT summarize their website. Connect what they do to the problem we solve. Then weave in: ' + googleCred
-    + 'Paragraph 2: Their problem - ' + pain + '. Keep it direct and specific. '
-    + 'Paragraph 3: ' + cs + ' Then make this offer: Frogfish works the first month free. No retainer, no contract, no commitment. We connect their data, show them exactly where their ad spend is leaking, and prove we can drive bottom line impact against their current spend. If we cannot show them something worth paying for, they owe nothing. '
-    + 'Casual peer-to-peer tone. Confident but not arrogant. No corporate speak. No exclamation marks. '
-    + 'OUTPUT THE 3 PARAGRAPHS ONLY. Do not write a greeting line. Do not write a signature. Do not write a subject line. Do not include a Calendly link. Just the 3 paragraphs.';
+    + 'Paragraph 1: Open with a razor-sharp observation about the SPECIFIC challenge their type of business faces with digital lead gen. Connect what they do to the problem we solve. Then weave in: ' + googleCred
+    + 'Paragraph 2: Their problem - ' + pain + '. Direct and specific. '
+    + 'Paragraph 3: ' + cs + ' Then make this offer: ' + offer + ' '
+    + 'Casual peer-to-peer tone. No corporate speak. No exclamation marks. '
+    + 'OUTPUT THE 3 PARAGRAPHS ONLY. No greeting. No signature. No subject line. No Calendly link.';
 }
 
 async function doScan() {
@@ -334,12 +394,12 @@ async function researchCompany(domain) {
 
 async function generateEmails(leads) {
   log('Generating '+leads.length+' emails...','info');
+  var variants = ['A','B','C','D'];
   for(var i=0;i<leads.length;i++) {
     var l = leads[i];
     var n = NICHES.filter(function(x){ return x.id===l.niche; })[0]||NICHES[0];
     set({scanProg:Math.round(70+(i/leads.length)*30)});
     try {
-      // Research company website first
       var websiteText = '';
       if(l.email) {
         var domain = l.email.split('@')[1];
@@ -347,21 +407,28 @@ async function generateEmails(leads) {
         websiteText = await researchCompany(domain);
       }
       var greeting = l.firstName ? 'Hi '+l.firstName+',' : 'Hi,';
+      var variant = variants[Math.floor(Math.random()*variants.length)];
+      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant);
+      var rawBody = await callAI(prompt);
+      var cleanedBody = cleanBody(rawBody);
+      var subjects = {
+        A: 'Quick question - '+l.company,
+        B: l.company+' - quick thought',
+        C: 'Your ad spend and your closed cases',
+        D: 'Following up on our conversation'
+      };
+      var subject = subjects[variant] || 'Quick question - '+l.company;
+      var fullEmail = 'Subject: '+subject+'
 
-      // Variant A - research-based, audit offer
-      var promptA = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText);
-      var rawA = await callAI(promptA);
-      var cleanedA = cleanBody(rawA);
-      var subjectA = 'Quick question - '+l.company;
-      var emailA = 'Subject: '+subjectA+'\n\n'+greeting+'\n\n'+cleanedA+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+'+greeting+'
 
-      // Variant B - short, first month free offer
-      var promptB = makePromptB(l.company, l.title, l.location, n.pain, l.niche, websiteText);
-      var rawB = await callAI(promptB);
-      var cleanedB = cleanBody(rawB);
-      var subjectB = l.company+' - quick thought';
-      var emailB = 'Subject: '+subjectB+'\n\n'+greeting+'\n\n'+cleanedB+'\n\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+'+cleanedBody+'
 
+Worth a 20-min call?
+'+CALENDLY+'
+
+Jared
+Frogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -372,14 +439,13 @@ async function generateEmails(leads) {
         email: l.email,
         niche: l.niche,
         location: l.location,
-        body: emailA,
-        bodyB: emailB,
-        activeVariant: 'A',
+        body: fullEmail,
+        variant: variant,
         status: 'pending',
         generatedAt: new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
       };
       S.reviewQueue = S.reviewQueue.concat([item]);
-      log('Both variants ready: '+(l.firstName||l.company)+' at '+l.company,'success');
+      log('Variant '+variant+' ready: '+(l.firstName||l.company)+' at '+l.company,'success');
       set({});
     } catch(e) {
       log('Failed for '+l.company+': '+e.message,'error');
@@ -483,6 +549,7 @@ async function approveEmail(id) {
   S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'approved'}) : x; });
   S.editingId = null;
   S.sent = S.sent+1;
+  if(item.variant && S.variantStats[item.variant]) S.variantStats[item.variant].sent++;
   set({});
 }
 
@@ -543,6 +610,22 @@ function pageDash() {
     +'<div><div class="card"><div class="label" style="color:#4ade80;margin-bottom:12px">Daily Workflow</div>'+scanBtn
     +(pending>0?'<button class="btn-approve mb-8" style="width:100%;text-align:left" onclick="go(\'review\')">&#9989; Review '+pending+' Emails</button>':'<div style="font-size:10px;color:#2d5c3a;margin-bottom:8px;padding:10px;background:#060c08;border:1px solid #1a3320;border-radius:2px">No emails pending review</div>')
     +'<button class="btn" style="width:100%;text-align:left;background:none;border-color:#4a7a58;color:#4a7a58" onclick="go(\'leads\')">&#128203; Lead Queue ('+S.leads.length+')</button></div>'
+    +'<div class="card mb-16"><div class="label" style="color:#4ade80;margin-bottom:12px">A/B Variant Performance</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+    +['A','B','C','D'].map(function(v){
+      var vs = S.variantStats[v]||{sent:0,opened:0,replied:0};
+      var openRate = vs.sent>0?Math.round((vs.opened/vs.sent)*100):0;
+      var replyRate = vs.sent>0?Math.round((vs.replied/vs.sent)*100):0;
+      var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd'};
+      var labels = {A:'Research',B:'Warm Intro',C:'ROI Lead',D:'Referral'};
+      return '<div style="background:#060c08;border:1px solid '+(colors[v]||'#1a3320')+';padding:12px;border-radius:2px">'
+        +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+(colors[v]||'#4ade80')+'">'+v+'</div>'
+        +'<div style="font-size:9px;color:#4a7a58;margin-bottom:8px">'+labels[v]+'</div>'
+        +'<div style="font-size:11px;color:#c0e8c8">'+vs.sent+' sent</div>'
+        +'<div style="font-size:11px;color:#4ade80">'+openRate+'% open</div>'
+        +'<div style="font-size:11px;color:#fbbf24">'+replyRate+'% reply</div>'
+        +'</div>';
+    }).join('')+'</div></div>'
     +'<div class="card"><div class="label" style="color:#4ade80;margin-bottom:8px">How It Works</div>'
     +[['1. Scan','Pull 10 companies, 2 contacts each from Apollo'],['2. Generate','Claude writes personalized emails'],['3. Review','You approve, edit, or reject each one'],['4. Send','Only approved emails go out']].map(function(s){
       return '<div style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-start"><div style="font-family:Syne,sans-serif;font-size:13px;font-weight:800;color:#1a5c2e;min-width:30px">'+s[0]+'</div><div style="font-size:10px;color:#4a7a58;line-height:1.5">'+s[1]+'</div></div>';
@@ -564,7 +647,9 @@ function pageReview() {
     var lines = item.body.split('\n');
     var subjectLine = lines[0].replace('Subject: ','');
     var emailBody = lines.slice(2).join('\n');
-    var pill = item.status==='pending'?'<span class="status-pill pill-pending">Pending Review</span>':
+    var variantColors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd'};
+  var variantBadge = item.variant ? '<span style="background:#0a0f0d;border:1px solid '+(variantColors[item.variant]||'#4a7a58')+';color:'+(variantColors[item.variant]||'#4a7a58')+';font-size:9px;padding:2px 8px;border-radius:2px;font-family:DM Mono,monospace;letter-spacing:.1em">VARIANT '+item.variant+'</span>' : '';
+  var pill = item.status==='pending'?'<span class="status-pill pill-pending">Pending Review</span>':
     item.status==='sending'?'<span class="status-pill pill-pending"><span class="pulse">&#9679;</span> Sending...</span>':
     item.status==='approved'?'<span class="status-pill pill-approved">&#10003; Sent</span>':
     item.status==='failed'?'<span class="status-pill pill-failed">&#9888; Send Failed</span>':
@@ -692,6 +777,40 @@ window.singleGen = function(id){ var l=S.leads.filter(function(x){ return x.id==
 window.set = set;
 
 draw();
+
+// Poll for Instantly webhook events every 30 seconds
+async function pollEvents() {
+  try {
+    var r = await fetch('/webhook/events');
+    var events = await r.json();
+    var updated = false;
+    events.forEach(function(e) {
+      var email = e.email || (e.lead && e.lead.email) || '';
+      var eventType = e.event_type || e.type || '';
+      // Find matching review item
+      var item = S.reviewQueue.filter(function(x){ return x.email===email && x.status==='approved'; })[0];
+      if(item && item.variant) {
+        var v = item.variant;
+        if(!S.variantStats[v]) S.variantStats[v] = {sent:0,opened:0,replied:0};
+        if((eventType.indexOf('open')>=0 || eventType==='email_opened') && !item._opened) {
+          S.variantStats[v].opened++;
+          item._opened = true;
+          updated = true;
+        }
+        if((eventType.indexOf('reply')>=0 || eventType==='email_replied') && !item._replied) {
+          S.variantStats[v].replied++;
+          item._replied = true;
+          S.booked = S.booked; // could increment meetings if interested
+          log('Reply received from '+email+' (Variant '+v+')','reply');
+          updated = true;
+        }
+      }
+    });
+    if(updated) set({});
+  } catch(e) {}
+  setTimeout(pollEvents, 30000);
+}
+setTimeout(pollEvents, 5000);
 </script>
 </body>
 </html>
