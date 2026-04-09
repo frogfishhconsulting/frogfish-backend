@@ -588,7 +588,7 @@ function pageReview() {
         ?'<div style="margin-bottom:12px"><textarea id="edit_'+item.id+'" class="email-edit">'+item.body+'</textarea></div>'
         :'<div class="email-box" style="max-height:200px;margin-bottom:12px;font-size:11px">'+emailBody+'</div>'
       )
-      +errorBox+actions+'</div>';
+      +errorBox+actions+retryBtn+'</div>';
   }).join('');
   return summary+cards;
 }
