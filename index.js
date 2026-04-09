@@ -74,35 +74,33 @@ app.post("/instantly/send", async (req, res) => {
   const { instantlyKey, to, subject, body } = req.body;
   if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
-    // New Instantly API (MD... keys use Bearer v2)
     const headers = { "Authorization": `Bearer ${instantlyKey}`, "Content-Type": "application/json" };
 
-    // Get campaigns via v2
+    // Get campaigns
     const campRes = await fetch("https://api.instantly.ai/api/v2/campaigns?limit=10", { headers });
     const campData = await campRes.json();
     console.log("campaigns:", JSON.stringify(campData).slice(0, 300));
-
-    const campList = campData.items || campData || [];
-    if (!campList.length) return res.json({ error: "No campaigns found - check Instantly API key" });
-    
+    const campList = campData.items || (Array.isArray(campData) ? campData : []);
+    if (!campList.length) return res.json({ error: "No campaigns found. Check API key has campaigns:all scope and you are on Growth plan." });
     const campaignId = campList[0].id;
 
-    // Add lead via v2
-    const leadRes = await fetch("https://api.instantly.ai/api/v2/leads", {
+    // Add lead with campaign_id inside lead object
+    const leadRes = await fetch("https://api.instantly.ai/api/v2/leads/add", {
       method: "POST",
       headers,
       body: JSON.stringify({
-        campaign_id: campaignId,
-        email: to,
-        personalization: body,
-        variables: { subject }
+        leads: [{
+          campaign_id: campaignId,
+          email: to,
+          personalization: body,
+          custom_variables: { subject: subject }
+        }]
       })
     });
     const leadData = await leadRes.json();
-    console.log("lead:", JSON.stringify(leadData).slice(0, 300));
-
+    console.log("lead result:", JSON.stringify(leadData).slice(0, 300));
     if (leadData.error) return res.json({ error: JSON.stringify(leadData.error) });
-    res.json({ success: true, campaign: campaignId });
+    res.json({ success: true, campaign: campaignId, result: leadData });
   } catch (e) {
     console.error("Instantly error:", e.message);
     res.status(500).json({ error: e.message });
