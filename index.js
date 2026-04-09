@@ -84,22 +84,23 @@ app.post("/instantly/send", async (req, res) => {
     if (!campList.length) return res.json({ error: "No campaigns found. Check API key has campaigns:all scope and you are on Growth plan." });
     const campaignId = campList[0].id;
 
-    // Add lead with campaign_id inside lead object
+    // Add lead - campaign_id at top level, leads array contains lead objects
     const leadRes = await fetch("https://api.instantly.ai/api/v2/leads/add", {
       method: "POST",
       headers,
       body: JSON.stringify({
+        campaign_id: campaignId,
         leads: [{
-          campaign_id: campaignId,
           email: to,
           personalization: body,
-          custom_variables: { subject: subject }
+          custom_variables: { subject: String(subject) }
         }]
       })
     });
     const leadData = await leadRes.json();
     console.log("lead result:", JSON.stringify(leadData).slice(0, 300));
     if (leadData.error) return res.json({ error: JSON.stringify(leadData.error) });
+    if (leadData.leads_uploaded === 0) return res.json({ error: "Lead not uploaded - " + JSON.stringify(leadData) });
     res.json({ success: true, campaign: campaignId, result: leadData });
   } catch (e) {
     console.error("Instantly error:", e.message);
