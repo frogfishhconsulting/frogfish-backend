@@ -224,16 +224,16 @@ function makePrompt(company, title, location, pain, niche, websiteContext) {
     : 'Our team came from 10 years at Google running lead gen for service businesses. We know exactly how the platform thinks - and it is not thinking about your bottom line. ';
 
   var contextNote = websiteContext && websiteContext.length > 50
-    ? 'IMPORTANT CONTEXT about ' + company + ' from their website - use this to make paragraph 1 specific and accurate, reference what they actually do: ' + websiteContext.slice(0, 800) + '. '
+    ? 'RESEARCH about ' + company + ' from their website: ' + websiteContext.slice(0, 800) + '. USE THIS RESEARCH to write a hyper-specific opening that connects what they do to the problem we solve. Do NOT just summarize what they do back to them - that is lazy. Instead, use what you know about their business to identify the SPECIFIC version of the problem they likely face. For example, if they are a transportation law firm, do not say they serve transportation companies - say something like their practice area generates high inquiry volume from compliance and accident cases with wildly different conversion rates, making it nearly impossible to know which ad campaigns actually drive signed retainers. That is how you use research. '
     : '';
 
   return 'Write the body of a short cold outreach email (under 140 words, 3 paragraphs). '
     + 'You are writing on behalf of Jared at Frogfish Consulting. '
     + contextNote
     + 'Company: ' + company + ' (' + title + ', ' + location + '). '
-    + 'Paragraph 1: One specific accurate sentence about what ' + company + ' actually does and their industry - use the website context above to be precise, not generic. Then naturally work in this credibility: ' + googleCred
+    + 'Paragraph 1: Use the research above to open with a razor-sharp observation about the SPECIFIC challenge their type of business faces with digital lead gen - something that makes them think "how did they know that?" Do NOT summarize their website. Connect what they do to the problem we solve. Then weave in: ' + googleCred
     + 'Paragraph 2: Their problem - ' + pain + '. Keep it direct and specific. '
-    + 'Paragraph 3: ' + cs + ' Offer a complimentary audit of their digital-to-revenue funnel - no cost, no pitch, just show them where the gaps are. If they become a client, Frogfish builds them a custom dashboard at no extra cost. '
+    + 'Paragraph 3: ' + cs + ' Then make this offer: Frogfish works the first month free. No retainer, no contract, no commitment. We connect their data, show them exactly where their ad spend is leaking, and prove we can drive bottom line impact against their current spend. If we cannot show them something worth paying for, they owe nothing. '
     + 'Casual peer-to-peer tone. Confident but not arrogant. No corporate speak. No exclamation marks. '
     + 'OUTPUT THE 3 PARAGRAPHS ONLY. Do not write a greeting line. Do not write a signature. Do not write a subject line. Do not include a Calendly link. Just the 3 paragraphs.';
 }
@@ -298,6 +298,26 @@ async function doScan() {
   }
 }
 
+function makePromptB(company, title, location, pain, niche, websiteContext) {
+  var contextNote = websiteContext && websiteContext.length > 50
+    ? 'RESEARCH about ' + company + ': ' + websiteContext.slice(0, 500) + '. Use this to make one sharp specific observation about their business in your opening. '
+    : '';
+
+  var nicheAngle = niche==='legal'
+    ? 'law firms spending on ads but not seeing it translate to signed cases'
+    : niche==='home'
+    ? 'home service businesses running ads with no idea which ones actually generate booked jobs'
+    : 'businesses with high ad spend and no clear line from digital campaigns to closed revenue';
+
+  return 'Write a very short cold email body - under 80 words, 2 short paragraphs only. Punchy and direct. '
+    + contextNote
+    + 'You are Jared from Frogfish Consulting. Company: ' + company + ' (' + title + '). '
+    + 'Paragraph 1: One razor-sharp sentence connecting what ' + company + ' does to this specific problem: ' + pain + '. Make it feel like you have seen this exact situation a hundred times. '
+    + 'Paragraph 2: "We work exclusively with ' + nicheAngle + '. If you are open to a 20-minute intro call, we will work the first month free - if we cannot show you something that moves the needle, you pay nothing. No pitch, just results." '
+    + 'Casual confident tone. No exclamation marks. No corporate speak. '
+    + 'OUTPUT 2 PARAGRAPHS ONLY. No greeting. No signature. No subject. No links.';
+}
+
 async function researchCompany(domain) {
   if(!domain || domain === 'unknown.com') return '';
   try {
@@ -326,11 +346,21 @@ async function generateEmails(leads) {
         websiteText = await researchCompany(domain);
       }
       var greeting = l.firstName ? 'Hi '+l.firstName+',' : 'Hi,';
-      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText);
-      var rawBody = await callAI(prompt);
-      var cleanedBody = cleanBody(rawBody);
-      var subject = 'Quick question - '+l.company;
-      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+
+      // Variant A - research-based, audit offer
+      var promptA = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText);
+      var rawA = await callAI(promptA);
+      var cleanedA = cleanBody(rawA);
+      var subjectA = 'Quick question - '+l.company;
+      var emailA = 'Subject: '+subjectA+'\n\n'+greeting+'\n\n'+cleanedA+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+
+      // Variant B - short, first month free offer
+      var promptB = makePromptB(l.company, l.title, l.location, n.pain, l.niche, websiteText);
+      var rawB = await callAI(promptB);
+      var cleanedB = cleanBody(rawB);
+      var subjectB = l.company+' - quick thought';
+      var emailB = 'Subject: '+subjectB+'\n\n'+greeting+'\n\n'+cleanedB+'\n\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -341,12 +371,14 @@ async function generateEmails(leads) {
         email: l.email,
         niche: l.niche,
         location: l.location,
-        body: fullEmail,
+        body: emailA,
+        bodyB: emailB,
+        activeVariant: 'A',
         status: 'pending',
         generatedAt: new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
       };
       S.reviewQueue = S.reviewQueue.concat([item]);
-      log('Email ready: '+(l.firstName||l.company)+' at '+l.company,'success');
+      log('Both variants ready: '+(l.firstName||l.company)+' at '+l.company,'success');
       set({});
     } catch(e) {
       log('Failed for '+l.company+': '+e.message,'error');
@@ -406,8 +438,9 @@ async function approveEmail(id) {
   S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'sending'}) : x; });
   set({});
 
-  // Extract subject and body
-  var lines = item.body.split('\n');
+  // Extract subject and body from active variant
+  var activeBody = (item.activeVariant==='B' && item.bodyB) ? item.bodyB : item.body;
+  var lines = activeBody.split('\n');
   var subject = lines[0].replace('Subject: ','').trim();
   var emailBody = lines.slice(2).join('\n').trim();
 
@@ -618,6 +651,11 @@ function pageSettings() {
         +'<div style="font-size:10px;color:#2d5c3a;margin-top:2px">'+i.d+'</div></div></div>';
     }).join('')+'</div></div>';
 }
+
+window.toggleVariant = function(id, v) {
+  S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{activeVariant:v}) : x; });
+  set({});
+};
 
 function saveEdit(id) {
   var ta = document.getElementById('edit_'+id);
