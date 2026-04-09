@@ -128,5 +128,30 @@ app.post("/apollo/search-enrich", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post("/research/company", async (req, res) => {
+  const { domain } = req.body;
+  if (!domain) return res.status(400).json({ error: "Missing domain" });
+  try {
+    // Fetch homepage
+    const url = domain.startsWith('http') ? domain : 'https://' + domain;
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; research bot)' },
+      signal: AbortSignal.timeout(5000)
+    });
+    const html = await r.text();
+    // Extract text content - strip tags, get first 2000 chars
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 2000);
+    res.json({ text, domain });
+  } catch (e) {
+    res.json({ text: '', domain, error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Frogfish BD Agent running on port ${PORT}`));
