@@ -75,39 +75,50 @@ app.post("/instantly/send", async (req, res) => {
   const { instantlyKey, to, from, subject, body, replyTo } = req.body;
   if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
-    // First get campaigns to find active one
-    const campRes = await fetch("https://api.instantly.ai/api/v2/campaigns?limit=5&status=1", {
-      headers: { "Authorization": `Bearer ${instantlyKey}` }
+    // Step 1: Get campaigns list using v1 API
+    const campRes = await fetch("https://api.instantly.ai/api/v1/campaign/list?limit=10&skip=0", {
+      method: "GET",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${instantlyKey}` }
     });
     const campData = await campRes.json();
-    const campaigns = campData.items || campData || [];
+    console.log("Campaigns response:", JSON.stringify(campData).slice(0, 200));
+    
+    const campaigns = Array.isArray(campData) ? campData : (campData.data || campData.campaigns || []);
     
     if(campaigns.length > 0) {
-      // Add lead to campaign
+      // Step 2: Add lead to first active campaign
       const campaignId = campaigns[0].id;
-      const leadRes = await fetch("https://api.instantly.ai/api/v2/leads", {
+      console.log("Adding lead to campaign:", campaignId);
+      
+      const leadRes = await fetch("https://api.instantly.ai/api/v1/lead/add", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${instantlyKey}` },
         body: JSON.stringify({
           campaign_id: campaignId,
           email: to,
-          personalization: body,
-          variables: { subject: subject }
+          first_name: to.split('@')[0],
+          custom_variables: {
+            subject: subject,
+            email_body: body
+          }
         })
       });
       const leadData = await leadRes.json();
-      res.json({ success: true, method: 'campaign', data: leadData });
+      console.log("Lead add response:", JSON.stringify(leadData).slice(0, 200));
+      
+      if(leadData.error || leadData.status === 'error') {
+        res.json({ error: leadData.error || leadData.message || JSON.stringify(leadData) });
+      } else {
+        res.json({ success: true, method: 'campaign_lead', campaign: campaignId, data: leadData });
+      }
     } else {
-      // No active campaign - try direct send
-      const r = await fetch("https://api.instantly.ai/api/v1/email/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${instantlyKey}` },
-        body: JSON.stringify({ to, from, subject, body, replyTo }),
-      });
-      const data = await r.json();
-      res.json(data);
+      // No campaigns found - return helpful error
+      res.json({ error: "No campaigns found in Instantly. Create a campaign first at app.instantly.ai" });
     }
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { 
+    console.error("Instantly send error:", e.message);
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
 app.post("/apollo/search-enrich", async (req, res) => {
