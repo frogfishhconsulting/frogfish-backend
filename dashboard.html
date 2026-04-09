@@ -418,17 +418,7 @@ async function generateEmails(leads) {
         D: 'Following up on our conversation'
       };
       var subject = subjects[variant] || 'Quick question - '+l.company;
-      var fullEmail = 'Subject: '+subject+'
-
-'+greeting+'
-
-'+cleanedBody+'
-
-Worth a 20-min call?
-'+CALENDLY+'
-
-Jared
-Frogfish Consulting';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
