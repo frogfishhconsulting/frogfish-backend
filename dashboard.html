@@ -176,13 +176,17 @@ function makePrompt(company, title, location, pain, niche) {
     ? 'We worked with a home services company where one campaign was eating 30% of their budget with zero closed jobs. We cut it and their revenue per marketing dollar nearly doubled.'
     : 'We helped a similar company connect their CRM to their campaigns and grew revenue 28% without increasing their ad spend.';
 
-  return 'Write the body of a short cold outreach email (under 130 words, 3 paragraphs). '
+  var googleCred = niche==='legal' || niche==='financial'
+    ? 'Before starting Frogfish, our team spent 10 years at Google working directly on lead gen for businesses like yours. We saw firsthand how the algorithm optimizes for volume, not quality. '
+    : 'Our team came from 10 years at Google running lead gen for service businesses. We know exactly how the platform thinks - and it is not thinking about your bottom line. ';
+
+  return 'Write the body of a short cold outreach email (under 140 words, 3 paragraphs). '
     + 'You are writing on behalf of Jared at Frogfish Consulting. '
     + 'Company: ' + company + ' (' + title + ', ' + location + '). '
-    + 'Paragraph 1: One specific sentence about ' + company + ' or their industry that shows you know their world. '
-    + 'Paragraph 2: Their problem - ' + pain + '. '
+    + 'Paragraph 1: One specific sentence about ' + company + ' or their industry that shows you know their world. Then naturally work in this credibility: ' + googleCred
+    + 'Paragraph 2: Their problem - ' + pain + '. Keep it direct and specific. '
     + 'Paragraph 3: ' + cs + ' Offer a free audit of their digital-to-revenue funnel. If they work with Frogfish, they also get a free custom dashboard. '
-    + 'Casual peer-to-peer tone. No corporate speak. No exclamation marks. '
+    + 'Casual peer-to-peer tone. Confident but not arrogant. No corporate speak. No exclamation marks. '
     + 'OUTPUT THE 3 PARAGRAPHS ONLY. Do not write a greeting line. Do not write a signature. Do not write a subject line. Do not include a Calendly link. Just the 3 paragraphs.';
 }
 
@@ -201,8 +205,7 @@ async function doScan() {
         person_titles: n.titles,
         q_organization_keyword_tags: n.industries,
         person_locations: ['United States'],
-        organization_num_employees_ranges: ['10,50','51,200'],
-        reveal_personal_emails: true
+        organization_num_employees_ranges: ['10,50','51,200']
       });
       if(d.people && d.people.length>0) {
         var mapped = d.people.filter(function(p){ return p.email && p.email.indexOf('unknown')===-1; }).map(function(p,j){
@@ -215,7 +218,7 @@ async function doScan() {
             contact: fullName||'Unknown',
             firstName: fn||'',
             title: p.title||'Unknown',
-            email: p.email||('contact@'+((p.organization&&p.organization.primary_domain)||'unknown.com')),
+            email: p.email||(p.organization&&p.organization.primary_domain ? 'contact@'+p.organization.primary_domain : ''),
             employees: String((p.organization&&p.organization.estimated_num_employees)||'?'),
             spend_signal: 'Apollo verified',
             score: scoreP(p),
