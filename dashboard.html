@@ -189,7 +189,7 @@ function makePrompt(company, title, location, pain, niche) {
 async function doScan() {
   if(!S.keys.apollo){ log('Apollo API key not set - go to Settings','error'); set({}); return; }
   set({scanning:true, scanProg:0, lastError:null});
-  log('Starting daily scan - 10 companies, 2 contacts max each...','info');
+  log('Starting daily scan - 2 companies, 1 contact each...','info');
   var all = [];
   for(var i=0;i<NICHES.length;i++) {
     var n = NICHES[i];
@@ -202,11 +202,10 @@ async function doScan() {
         q_organization_keyword_tags: n.industries,
         person_locations: ['United States'],
         organization_num_employees_ranges: ['10,50','51,200'],
-        reveal_personal_emails: true,
-        contact_email_status: ['verified','likely to engage']
+        reveal_personal_emails: true
       });
       if(d.people && d.people.length>0) {
-        var mapped = d.people.filter(function(p){ return p.email && p.email.indexOf('unknown.com')===-1; }).map(function(p,j){
+        var mapped = d.people.filter(function(p){ return p.email || p.organization; }).map(function(p,j){
           var fn = p.first_name || (p.name ? p.name.split(' ')[0] : '');
           var ln = p.last_name || (p.name ? p.name.split(' ').slice(1).join(' ') : '');
           var fullName = fn && ln ? fn+' '+ln : (p.name||'');
@@ -381,7 +380,7 @@ function pageDash() {
   }).join('');
   var scanBtn = S.scanning
     ? '<div style="font-size:11px;color:#fbbf24;margin-bottom:6px"><span class="pulse">&#9679;</span> Scanning... '+S.scanProg+'%</div><div class="progress-bar"><div class="progress-fill" style="width:'+S.scanProg+'%"></div></div>'
-    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Daily Scan (10 companies)</button>';
+    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Daily Scan (2 companies)</button>';
   return err+alert+stats
     +'<div class="grid-12">'
     +'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Agent Log</div><span style="font-size:10px;color:'+(S.scanning?'#4ade80':'#2d5c3a')+'">'+(S.scanning?'SCANNING':'IDLE')+'</span></div><div class="log-scroll">'+logHtml+'</div></div>'
