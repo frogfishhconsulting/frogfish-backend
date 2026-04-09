@@ -588,7 +588,7 @@ function pageReview() {
         ?'<div style="margin-bottom:12px"><textarea id="edit_'+item.id+'" class="email-edit">'+item.body+'</textarea></div>'
         :'<div class="email-box" style="max-height:200px;margin-bottom:12px;font-size:11px">'+emailBody+'</div>'
       )
-      +errorBox+actions+retryBtn+'</div>';
+      +(item.status==='failed' && item.sendError ? '<div style="background:#1a0a0a;border:1px solid #fbbf24;border-radius:2px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:#fbbf24">&#9888; Send failed: '+item.sendError+'<br><button class="btn btn-sm" style="margin-top:6px" onclick="retryEmail(\''+item.id+'\')" >Retry</button></div>' : '')+actions+'</div>';
   }).join('');
   return summary+cards;
 }
