@@ -258,45 +258,72 @@ async function enrichNames(leads){
 }
 
 async function generateForReview(leads){
-  log('Generating '+leads.length+' emails - will appear in Review Queue...','info');
+  log('Generating '+leads.length+' emails for review queue...','info');
   for(var i=0;i<leads.length;i++){
     var l=leads[i];
     var n=NICHES.filter(function(x){return x.id===l.niche})[0]||NICHES[0];
     set({scanProg:Math.round(70+(i/leads.length)*30)});
     try{
-      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'&&l.contact!='there'&&l.contact!='Unknown'?l.contact.split(' ')[0]:null);var greeting=firstName?('Hi '+firstName+','):'Hi,';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email.\n\nFOLLOW THIS STRUCTURE EXACTLY - output nothing else:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting+',\n\n[1 sentence about '+l.company+' or their industry that shows you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with a real number - law firm: 42% cost per signed case drop, home services: campaign eating 30% of budget with zero closed jobs, multi-location: 28% revenue growth without more spend]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together we build you a custom dashboard so you see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nCRITICAL RULES: 1) The opening greeting is already written above - copy it EXACTLY, do NOT replace it with [Name] or any placeholder. 2) Sign off EXACTLY as two lines: Jared then Frogfish Consulting - do NOT write [Your name]. 3) Under 150 words. 4) Casual peer-to-peer tone. 5) No exclamation marks. 6) No 'Best,' or 'Regards,' - just Jared on its own line then Frogfish Consulting.');
-      // Strip any AI-generated signature and append real one
-      body = body.replace(/\n+(Best,?|Regards,?|Sincerely,?|Cheers,?|Thanks,?)\s*\n+.*?(Frogfish|Jared).*$/si, '').replace(/\[Your name\]/gi, 'Jared').replace(/\[Name\]/gi, greeting).trim();
-      body = body + '\n\nJared\nFrogfish Consulting';
+      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'?l.contact.split(' ')[0]:null);
+      var greeting=firstName?('Hi '+firstName+','):'Hi,';
+      var rawBody=await ai('Write the body of a cold outreach email. Company: '+l.company+' ('+l.title+', '+l.location+'). Write 3 short casual paragraphs: 1) Something specific about '+l.company+' or their industry showing you know their world. 2) Their problem: '+n.pain+'. 3) A relevant case study with one real number: law firm = cost per signed case dropped 42% in 4 months; home services = campaign eating 30% of budget with zero closed jobs; financial = grew revenue 28% without more spend. End with exactly this sentence: Happy to do a free audit of your funnel - no pitch, just show you where the leaks are. If we work together we also build you a free custom dashboard. IMPORTANT: Output body paragraphs only. No greeting line. No name. No signature line. No subject line. No Calendly link. Under 130 words.');
+      // Strip any AI-added greeting/signature
+      var cleaned=rawBody.replace(/^hi[\s\S]*?
+
+/i,'').replace(/
++(best,?|regards,?|sincerely,?|cheers,?|thanks,?|warm regards,?)[\s\S]*$/i,'').replace(/\[[\w\s]*name[\w\s]*\]/gi,'').replace(/\[your[\s\S]*?\]/gi,'').trim();
+      var subject='Quick question for '+l.company;
+      var body='Subject: '+subject+'
+
+'+greeting+'
+
+'+cleaned+'
+
+Worth a 20-min call? https://calendly.com/frogfishconsulting/discovery
+
+Jared
+Frogfish Consulting';
       var item={id:'rq_'+l.id,leadId:l.id,company:l.company,contact:l.contact,title:l.title,email:l.email,niche:l.niche,location:l.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
       S.reviewQueue=S.reviewQueue.concat([item]);
-      log('Email ready for review: '+l.contact+' at '+l.company,'success');
+      log('Email ready for review: '+(firstName||l.company)+' at '+l.company,'success');
       set({});
     }catch(e){
-      log('Failed to generate for '+l.contact+': '+e.message,'error');
+      log('Failed to generate for '+l.company+': '+e.message,'error');
     }
     await new Promise(function(r){setTimeout(r,400)});
   }
   set({scanning:false,scanProg:0,tab:'review'});
   log('All emails generated - review queue ready. Nothing sent yet.','meeting');
 }
-
-// Also allow manual generation for existing leads
 async function doGen(lead){
   set({genId:lead.id});
   var n=NICHES.filter(function(x){return x.id===lead.niche})[0]||NICHES[0];
   try{
-    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'&&lead.contact!='there'?lead.contact.split(' ')[0]:null);var greeting3=fn?('Hi '+fn+','):'Hi,';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email to someone at '+lead.company+' ('+lead.title+') in '+lead.location+'.\n\nFOLLOW THIS STRUCTURE EXACTLY:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting3+',\n\n[1 sentence about '+lead.company+' or their industry showing you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with real number]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together, we build you a custom dashboard so you can see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nCRITICAL RULES: 1) The opening greeting is already written above - copy it EXACTLY, do NOT replace it with [Name] or any placeholder. 2) Sign off EXACTLY as two lines: Jared then Frogfish Consulting - do NOT write [Your name]. 3) Under 150 words. 4) Casual peer-to-peer tone. 5) No exclamation marks. 6) No 'Best,' or 'Regards,' - just Jared on its own line then Frogfish Consulting.');
-    // Add to review queue instead of sending directly
-    var item={id:'rq_'+lead.id+'_'+Date.now(),leadId:lead.id,company:lead.company,contact:lead.contact,title:lead.title,email:lead.email,niche:lead.niche,location:lead.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
+    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'?lead.contact.split(' ')[0]:null);
+    var greeting3=fn?('Hi '+fn+','):'Hi,';
+    var rawBody=await ai('Write the body of a cold outreach email. Company: '+lead.company+' ('+lead.title+', '+lead.location+'). Write 3 short casual paragraphs: 1) Something specific about '+lead.company+' or their industry showing you know their world. 2) Their problem: '+n.pain+'. 3) A relevant case study with one real number: law firm = cost per signed case dropped 42% in 4 months; home services = campaign eating 30% of budget with zero closed jobs; financial = grew revenue 28% without more spend. End with exactly this sentence: Happy to do a free audit of your funnel - no pitch, just show you where the leaks are. If we work together we also build you a free custom dashboard. IMPORTANT: Output body paragraphs only. No greeting line. No name. No signature line. No subject line. No Calendly link. Under 130 words.');
+    var cleaned=rawBody.replace(/^hi[\s\S]*?
+
+/i,'').replace(/
++(best,?|regards,?|sincerely,?|cheers,?|thanks,?|warm regards,?)[\s\S]*$/i,'').replace(/\[[\w\s]*name[\w\s]*\]/gi,'').replace(/\[your[\s\S]*?\]/gi,'').trim();
+    var r='Subject: Quick question for '+lead.company+'
+
+'+greeting3+'
+
+'+cleaned+'
+
+Worth a 20-min call? https://calendly.com/frogfishconsulting/discovery
+
+Jared
+Frogfish Consulting';
+    var item={id:'rq_'+lead.id+'_'+Date.now(),leadId:lead.id,company:lead.company,contact:lead.contact,title:lead.title,email:lead.email,niche:lead.niche,location:lead.location,body:r,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
     S.reviewQueue=S.reviewQueue.concat([item]);
-    log('Added to review queue: '+lead.contact+' at '+lead.company,'success');
+    log('Added to review queue: '+(fn||lead.company)+' at '+lead.company,'success');
   }catch(e){
     log('Failed: '+e.message,'error');
   }
   set({genId:null,tab:'review'});
 }
-
 function approveEmail(id){
   S.reviewQueue=S.reviewQueue.map(function(item){
     if(item.id===id){
@@ -816,16 +843,9 @@ async function generateForReview(leads){
     var n=NICHES.filter(function(x){return x.id===l.niche})[0]||NICHES[0];
     set({scanProg:Math.round(70+(i/leads.length)*30)});
     try{
-      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'&&l.contact!='there'&&l.contact!='Unknown'?l.contact.split(' ')[0]:null);var greeting=firstName?('Hi '+firstName+','):'Hi,';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email.\n\nFOLLOW THIS STRUCTURE EXACTLY - output nothing else:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting+',\n\n[1 sentence about '+l.company+' or their industry that shows you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with a real number - law firm: 42% cost per signed case drop, home services: campaign eating 30% of budget with zero closed jobs, multi-location: 28% revenue growth without more spend]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together we build you a custom dashboard so you see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nCRITICAL RULES: 1) The opening greeting is already written above - copy it EXACTLY, do NOT replace it with [Name] or any placeholder. 2) Sign off EXACTLY as two lines: Jared then Frogfish Consulting - do NOT write [Your name]. 3) Under 150 words. 4) Casual peer-to-peer tone. 5) No exclamation marks. 6) No 'Best,' or 'Regards,' - just Jared on its own line then Frogfish Consulting.');
-      // Strip any AI-generated signature and append real one
-      body = body.replace(/\n+(Best,?|Regards,?|Sincerely,?|Cheers,?|Thanks,?)\s*\n+.*?(Frogfish|Jared).*$/si, '').replace(/\[Your name\]/gi, 'Jared').replace(/\[Name\]/gi, greeting).trim();
-      body = body + '\n\nJared\nFrogfish Consulting';
-      var item={id:'rq_'+l.id,leadId:l.id,company:l.company,contact:l.contact,title:l.title,email:l.email,niche:l.niche,location:l.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
-      S.reviewQueue=S.reviewQueue.concat([item]);
-      log('Email ready for review: '+l.contact+' at '+l.company,'success');
-      set({});
-    }catch(e){
-      log('Failed to generate for '+l.contact+': '+e.message,'error');
+      var firstName=l.firstName||(l.contact&&l.contact!='Unknown'&&l.contact!='there'&&l.contact!='Unknown'?l.contact.split(' ')[0]:null);var greeting=firstName?('Hi '+firstName+','):'Hi,';var body=ai('Write only the email body for a cold outreach from Jared at Frogfish Consulting to '+l.company+' ('+l.title+', '+l.location+').\nWrite 3 short paragraphs + 1 final sentence:\nParagraph 1: Specific to '+l.company+' or their industry.\nParagraph 2: Their pain: '+n.pain+'\nParagraph 3: Case study with number. Law firms: cost per signed case dropped 42% in 4 months. Home services: campaign eating 30% of budget with zero closed jobs. Financial: grew revenue 28% without more spend.\nFinal sentence: Happy to do a free audit of your funnel - no pitch, just show you where the leaks are. If we work together we build you a free custom dashboard.\nOutput body paragraphs ONLY. No greeting. No signature. No subject line. No name.');
+      body = greeting + '\n\n' + body.replace(/^(Hi\s*[^,\n]*,?\s*\n+)/i,'').replace(/\n*(Best,?|Regards,?|Sincerely,?|Cheers,?|Thanks,?|Warm regards,?)\s*\n*[\s\S]*$/i,'').replace(/\[(Your\s*)?[Nn]ame\]/g,'').trim();
+      body = 'Subject: '+l.company+' - quick question\n\n' + body + '\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting'
     }
     await new Promise(function(r){setTimeout(r,400)});
   }
@@ -838,11 +858,9 @@ async function doGen(lead){
   set({genId:lead.id});
   var n=NICHES.filter(function(x){return x.id===lead.niche})[0]||NICHES[0];
   try{
-    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'&&lead.contact!='there'?lead.contact.split(' ')[0]:null);var greeting3=fn?('Hi '+fn+','):'Hi,';var body=await ai('You are Jared from Frogfish Consulting. Write a cold email to someone at '+lead.company+' ('+lead.title+') in '+lead.location+'.\n\nFOLLOW THIS STRUCTURE EXACTLY:\n\nSubject: [specific curiosity-driven subject line]\n\n'+greeting3+',\n\n[1 sentence about '+lead.company+' or their industry showing you know their world]\n\n[1-2 sentences on their problem: '+n.pain+']\n\n[1 sentence case study with real number]\n\nHappy to do a free audit of your funnel - no pitch, just show you where the gaps are. If we work together, we build you a custom dashboard so you can see everything in one place.\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting\n\nCRITICAL RULES: 1) The opening greeting is already written above - copy it EXACTLY, do NOT replace it with [Name] or any placeholder. 2) Sign off EXACTLY as two lines: Jared then Frogfish Consulting - do NOT write [Your name]. 3) Under 150 words. 4) Casual peer-to-peer tone. 5) No exclamation marks. 6) No 'Best,' or 'Regards,' - just Jared on its own line then Frogfish Consulting.');
-    // Add to review queue instead of sending directly
-    var item={id:'rq_'+lead.id+'_'+Date.now(),leadId:lead.id,company:lead.company,contact:lead.contact,title:lead.title,email:lead.email,niche:lead.niche,location:lead.location,body:body,status:'pending',generatedAt:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
-    S.reviewQueue=S.reviewQueue.concat([item]);
-    log('Added to review queue: '+lead.contact+' at '+lead.company,'success');
+    var fn=lead.firstName||(lead.contact&&lead.contact!='Unknown'&&lead.contact!='there'?lead.contact.split(' ')[0]:null);var greeting3=fn?('Hi '+fn+','):'Hi,';var body=ai('Write only the email body for a cold outreach from Jared at Frogfish Consulting to '+lead.company+' ('+lead.title+', '+lead.location+').\nWrite 3 short paragraphs + 1 final sentence:\nParagraph 1: Specific to '+lead.company+' or their industry.\nParagraph 2: Their pain: '+n.pain+'\nParagraph 3: Case study with number. Law firms: cost per signed case dropped 42% in 4 months. Home services: campaign eating 30% of budget with zero closed jobs. Financial: grew revenue 28% without more spend.\nFinal sentence: Happy to do a free audit of your funnel - no pitch, just show you where the leaks are. If we work together we build you a free custom dashboard.\nOutput body paragraphs ONLY. No greeting. No signature. No subject line. No name.');
+    r = greeting3 + '\n\n' + r.replace(/^(Hi\s*[^,\n]*,?\s*\n+)/i,'').replace(/\n*(Best,?|Regards,?|Sincerely,?|Cheers,?|Thanks,?|Warm regards,?)\s*\n*[\s\S]*$/i,'').replace(/\[(Your\s*)?[Nn]ame\]/g,'').trim();
+    r = 'Subject: '+lead.company+' - quick question\n\n' + r + '\n\nWorth a 20-min call? https://calendly.com/frogfishconsulting/discovery\n\nJared\nFrogfish Consulting'
   }catch(e){
     log('Failed: '+e.message,'error');
   }
