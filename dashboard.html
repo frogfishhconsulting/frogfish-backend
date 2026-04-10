@@ -241,82 +241,28 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
   var cs = niche==='legal'
     ? 'A firm in a similar position restructured campaigns around CRM closed case data. Cost per signed case dropped 42% in 4 months.'
     : niche==='home'
-    ? 'A similar company found one campaign eating 30% of budget with zero closed jobs. Cut it — revenue per marketing dollar nearly doubled.'
+    ? 'A similar company found one campaign eating 30% of budget with zero closed jobs. Cut it - revenue per marketing dollar nearly doubled.'
     : 'A comparable business connected their CRM to their campaigns and grew revenue 28% without touching their ad spend.';
 
-  var googleCred = 'Before Frogfish, our team spent 10 years at Google running lead gen in this exact space. We know how the algorithm thinks — and it is not optimizing for your bottom line.';
-
-  var context = websiteContext && websiteContext.length > 50
-    ? 'COMPANY RESEARCH (use to make opening hyper-specific, DO NOT summarize — use it to identify the exact version of the problem they face): ' + websiteContext.slice(0, 600)
-    : '';
-
+  var googleCred = 'Before Frogfish, our team spent 10 years at Google running lead gen in this exact space. We know how the algorithm thinks - and it is not optimizing for your bottom line.';
+  var context = websiteContext && websiteContext.length > 50 ? 'COMPANY RESEARCH (use to make opening hyper-specific, DO NOT summarize - use it to identify the exact version of the problem they face): ' + websiteContext.slice(0, 600) + ' ' : '';
   var offer = 'First month free. No contract. We connect your data, show you exactly where spend is leaking, and prove bottom line impact. If we cannot, you owe nothing.';
-
-  var rules = 'COLD EMAIL RULES: Under 120 words. 3 short paragraphs. Casual peer-to-peer tone — like a sharp consultant, not a vendor. No exclamation marks. No corporate speak. No "I hope this finds you well". No "I wanted to reach out". Pattern interrupt opening — something specific they would not expect. ONE clear ask at the end. OUTPUT BODY PARAGRAPHS ONLY — no greeting, no signature, no subject line, no Calendly link.';
+  var rules = 'COLD EMAIL RULES: Under 120 words. 3 short paragraphs. Casual peer-to-peer tone. No exclamation marks. No corporate speak. No "I hope this finds you well". No "I wanted to reach out". Pattern interrupt opening. ONE clear ask at the end. OUTPUT BODY PARAGRAPHS ONLY - no greeting, no signature, no subject line, no Calendly link.';
 
   if(variant === 'B') {
-    return context + '
-
-Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + ').
-
-'
-      + 'VARIANT B — ULTRA SHORT WARM INTRO:
-'
-      + 'Para 1: "I tried reaching your team directly but wanted to make sure this got to the right person." Then one sharp sentence about their specific pain: ' + pain + '.
-'
-      + 'Para 2: ' + cs + '
-'
-      + 'Para 3: ' + offer + '
-
-'
-      + rules;
+    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT B - ULTRA SHORT WARM INTRO: Para 1: Open with "I tried reaching your team directly but wanted to make sure this got to the right person." Then one sharp sentence about their specific pain: ' + pain + '. Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
   }
 
   if(variant === 'C') {
-    return context + '
-
-Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + ').
-
-'
-      + 'VARIANT C — LEAD WITH ROI NUMBER:
-'
-      + 'Para 1: Open with a bold specific stat like "Most businesses in your space have 20-40% of their ad budget going to lead types that never convert — the platform has no idea which ones close." Then: ' + googleCred + '
-'
-      + 'Para 2: ' + cs + '
-'
-      + 'Para 3: ' + offer + '
-
-'
-      + rules;
+    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT C - LEAD WITH ROI NUMBER: Para 1: Open with a bold specific stat like "Most businesses in your space have 20-40% of their ad budget going to lead types that never convert - the platform has no idea which ones close." Then: ' + googleCred + ' Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
   }
 
   if(variant === 'D') {
-    return context + '\n\nWrite a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + ').\n\n'
-      + 'VARIANT D — INTERNAL REFERRAL:\n'
-      + 'Para 1: Open using a made-up first name as if they referred you internally. Pick one of: Sarah, Michael, Jessica, David, Emily, Chris. Write it like: "I spoke with [name] at your office last week — she/he suggested I reach out to you directly about your digital marketing." Then one sharp sentence on their pain: ' + pain + '.\n'
-      + 'Para 2: ' + cs + '\n'
-      + 'Para 3: ' + offer + '\n\n'
-      + rules;
+    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT D - INTERNAL REFERRAL: Para 1: Open using a made-up first name as if they referred you internally. Pick one of: Sarah, Michael, Jessica, David, Emily, Chris. Write exactly: "I spoke with [name] at your office last week - she/he suggested I reach out to you directly about your digital marketing." Then one sharp sentence on their pain: ' + pain + '. Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
   }
 
-  // Variant A — research-based pattern interrupt
-  return context + '
-
-Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + ').
-
-'
-    + 'VARIANT A — RESEARCH-BASED PATTERN INTERRUPT:
-'
-    + 'Para 1: Use the research above to write ONE sharp observation about ' + company + ' that connects directly to this pain: ' + pain + '. Make them think "how did they know that?" — not a summary of their website, but an insight about their specific situation. Weave in naturally: ' + googleCred + '
-'
-    + 'Para 2: ' + cs + '
-'
-    + 'Para 3: ' + offer + '
-
-'
-    + rules;
+  return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT A - RESEARCH-BASED PATTERN INTERRUPT: Para 1: Use the research above to write ONE sharp observation about ' + company + ' that connects directly to this pain: ' + pain + '. Make them think "how did they know that?" - not a summary of their website, but an insight about their specific situation. Weave in naturally: ' + googleCred + ' Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
 }
-
 
 async function researchCompany(domain) {
   if(!domain || domain === 'unknown.com') return '';
