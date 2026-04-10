@@ -102,7 +102,7 @@ var S = {
   scanning: false, scanProg: 0,
   lastError: null,
   dailyLimit: 5, maxPerCompany: 1,
-  autoScan: false, autoScanInterval: null,
+  autoScan: false, autoScanInterval: null, apolloPage: 1,
   log: [
     {t:'09:14 AM', m:'Agent ready - run a scan to get started', c:'info'}
   ],
@@ -119,6 +119,7 @@ var S = {
     var sv = localStorage.getItem('ff_vstats'); if(sv) S.variantStats = JSON.parse(sv);
     var se = localStorage.getItem('ff_seen'); if(se) S.seenEmails = JSON.parse(se);
     var sl2 = localStorage.getItem('ff_sentlog'); if(sl2) S.sentLog = JSON.parse(sl2);
+    var sp = localStorage.getItem('ff_page'); if(sp) S.apolloPage = JSON.parse(sp);
   } catch(e) { console.log('Restore error:', e); }
 })();
 
@@ -683,7 +684,7 @@ async function doScan() {
     log('Querying Apollo for '+n.label+'...','info');
     try {
       var d = await apiPost('/apollo/search', {
-        apolloKey: S.keys.apollo, page:1, per_page:10,
+        apolloKey: S.keys.apollo, page:S.apolloPage, per_page:10,
         person_titles: n.titles,
         q_organization_keyword_tags: n.industries,
         person_locations: ['United States'],
@@ -722,6 +723,7 @@ async function doScan() {
   var seenSet = new Set(S.seenEmails.concat(S.leads.map(function(l){ return l.email; })));
   var fresh = limited.filter(function(l){ return l.email && l.email.indexOf('unknown')===-1 && !seenSet.has(l.email); });
   fresh.forEach(function(l){ if(S.seenEmails.indexOf(l.email)===-1) S.seenEmails.push(l.email); });
+  S.apolloPage = S.apolloPage + 1;
   if(fresh.length>0) {
     set(function(s){ return {leads:s.leads.concat(fresh)}; });
     log('Found '+fresh.length+' new contacts - generating emails...','success');
