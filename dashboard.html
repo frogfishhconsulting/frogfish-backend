@@ -588,7 +588,13 @@ function pageLeads() {
       +'<div style="font-size:10px;color:#4a7a58">'+l.location+'</div>'
       +'<div style="font-size:9px;color:#4a7a58;text-transform:uppercase">'+l.niche+'</div>'
       +'<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:800;color:'+(l.score>88?'#4ade80':'#7dd3fc')+'">'+l.score+'</div>'
-      +'<button class="btn btn-sm" style="font-size:9px;padding:5px 10px" onclick="event.stopPropagation();singleGen('+l.id+')">+ Email</button>'
+      +(function(){
+        var wasSent = S.sentLog.some(function(s){ return s.email===l.email; });
+        var inQueue = S.reviewQueue.some(function(q){ return q.email===l.email && q.status==='pending'; });
+        if(wasSent) return '<span style="font-size:9px;color:#4ade80;padding:5px 10px;border:1px solid #1a5c2e;border-radius:2px">&#10003; Sent</span>';
+        if(inQueue) return '<span style="font-size:9px;color:#fbbf24;padding:5px 10px;border:1px solid #4a3800;border-radius:2px">&#9679; In Queue</span>';
+        return '<button class="btn btn-sm" style="font-size:9px;padding:5px 10px" onclick="event.stopPropagation();singleGen('+l.id+')">+ Email</button>';
+      })()
       +'</div></div>';
   }).join('');
   return '<div style="display:grid;grid-template-columns:'+(sl?'1fr 1fr':'1fr')+';gap:20px">'
@@ -720,9 +726,9 @@ async function doScan() {
   }
   set({scanProg:100});
   var limited = applyDailyLimits(all);
-  var seenSet = new Set(S.seenEmails.concat(S.leads.map(function(l){ return l.email; })));
-  var fresh = limited.filter(function(l){ return l.email && l.email.indexOf('unknown')===-1 && !seenSet.has(l.email); });
-  fresh.forEach(function(l){ if(S.seenEmails.indexOf(l.email)===-1) S.seenEmails.push(l.email); });
+  // Only dedup against leads already in the leads list - allow new contacts through
+  var existingEmails = new Set(S.leads.map(function(l){ return l.email; }));
+  var fresh = limited.filter(function(l){ return l.email && l.email.indexOf('unknown')===-1 && !existingEmails.has(l.email); });
   S.apolloPage = S.apolloPage + 1;
   if(fresh.length>0) {
     set(function(s){ return {leads:s.leads.concat(fresh)}; });
