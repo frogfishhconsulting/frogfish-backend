@@ -91,14 +91,14 @@ var MOCK = [
 
 var S = {
   tab: 'dashboard',
-  leads: MOCK.slice(),
+  leads: [],
   selLead: null,
   reviewQueue: [],
   editingId: null,
-  sent: 0, booked: 0, variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0}},
+  sent: 0, booked: 0, seenEmails: [], variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
-  dailyLimit: 2, maxPerCompany: 1,
+  dailyLimit: 5, maxPerCompany: 1,
   log: [
     {t:'09:14 AM', m:'Agent ready - awaiting daily scan', c:'info'},
     {t:'09:15 AM', m:'Settings: 10 companies/day, 2 contacts max per company', c:'info'},
@@ -117,6 +117,8 @@ var S = {
     if(savedLeads) S.leads = JSON.parse(savedLeads);
     if(savedQueue) S.reviewQueue = JSON.parse(savedQueue);
     if(savedSent) S.sent = JSON.parse(savedSent);
+    var savedVStats = localStorage.getItem('ff_vstats');
+    if(savedVStats) S.variantStats = JSON.parse(savedVStats);
   } catch(e) {}
 })();
 
@@ -130,6 +132,7 @@ function set(p){
     localStorage.setItem('ff_leads', JSON.stringify(S.leads));
     localStorage.setItem('ff_queue', JSON.stringify(S.reviewQueue));
     localStorage.setItem('ff_sent', JSON.stringify(S.sent));
+    localStorage.setItem('ff_vstats', JSON.stringify(S.variantStats));
   } catch(e) {}
   draw(); 
 }
@@ -299,10 +302,27 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
     + 'OUTPUT THE 3 PARAGRAPHS ONLY. No greeting. No signature. No subject line. No Calendly link.';
 }
 
+function getSeenEmails() {
+  try {
+    var saved = localStorage.getItem('ff_seen');
+    var arr = saved ? JSON.parse(saved) : [];
+    return new Set(arr);
+  } catch(e) { return new Set(); }
+}
+
+function addSeenEmail(email) {
+  try {
+    var saved = localStorage.getItem('ff_seen');
+    var arr = saved ? JSON.parse(saved) : [];
+    if(arr.indexOf(email) === -1) arr.push(email);
+    localStorage.setItem('ff_seen', JSON.stringify(arr));
+  } catch(e) {}
+}
+
 async function doScan() {
   if(!S.keys.apollo){ log('Apollo API key not set - go to Settings','error'); set({}); return; }
   set({scanning:true, scanProg:0, lastError:null});
-  log('Starting daily scan - 2 companies, 1 contact each...','info');
+  log('Starting daily scan - 5 companies, 1 contact each...','info');
   var all = [];
   for(var i=0;i<NICHES.length;i++) {
     var n = NICHES[i];
@@ -310,7 +330,7 @@ async function doScan() {
     log('Querying Apollo for '+n.label+'...','info');
     try {
       var d = await apiPost('/apollo/search', {
-        apolloKey: S.keys.apollo, page:1, per_page:5,
+        apolloKey: S.keys.apollo, page:1, per_page:20,
         person_titles: n.titles,
         q_organization_keyword_tags: n.industries,
         person_locations: ['United States'],
@@ -347,11 +367,15 @@ async function doScan() {
   }
   set({scanProg:100});
   var limited = applyDailyLimits(all);
-  var ex = new Set(S.leads.map(function(l){ return l.email; }));
-  var fresh = limited.filter(function(l){ return !ex.has(l.email); });
+  var seen = getSeenEmails();
+  // Also add current leads to seen
+  S.leads.forEach(function(l){ if(l.email) seen.add(l.email); });
+  var fresh = limited.filter(function(l){ return l.email && !seen.has(l.email) && l.email.indexOf('unknown.com')===-1; });
+  fresh.forEach(function(l){ if(l.email) addSeenEmail(l.email); });
   if(fresh.length>0) {
     set(function(s){ return {leads:s.leads.concat(fresh)}; });
     log('Found '+fresh.length+' contacts - generating emails for review...','success');
+    addSeenEmails(fresh.map(function(l){ return l.email; }));
     await generateEmails(fresh);
   } else {
     log('No new leads - try clearing leads first (F12 console: S.leads=[];S.reviewQueue=[];draw())','info');
@@ -540,6 +564,8 @@ async function approveEmail(id) {
   S.editingId = null;
   S.sent = S.sent+1;
   if(item.variant && S.variantStats[item.variant]) S.variantStats[item.variant].sent++;
+  // Make sure this email is permanently in seen list
+  if(item.email) addSeenEmail(item.email);
   set({});
 }
 
@@ -593,7 +619,7 @@ function pageDash() {
   }).join('');
   var scanBtn = S.scanning
     ? '<div style="font-size:11px;color:#fbbf24;margin-bottom:6px"><span class="pulse">&#9679;</span> Scanning... '+S.scanProg+'%</div><div class="progress-bar"><div class="progress-fill" style="width:'+S.scanProg+'%"></div></div>'
-    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Daily Scan (2 companies)</button>';
+    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Daily Scan (5 companies)</button>';
   return err+alert+stats
     +'<div class="grid-12">'
     +'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Agent Log</div><span style="font-size:10px;color:'+(S.scanning?'#4ade80':'#2d5c3a')+'">'+(S.scanning?'SCANNING':'IDLE')+'</span></div><div class="log-scroll">'+logHtml+'</div></div>'
@@ -603,7 +629,7 @@ function pageDash() {
     +'<div class="card mb-16"><div class="label" style="color:#4ade80;margin-bottom:12px">A/B Variant Performance</div>'
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
     +['A','B','C','D'].map(function(v){
-      var vs = S.variantStats[v]||{sent:0,opened:0,replied:0};
+      var vs = (S.variantStats&&S.variantStats[v])||{sent:0,opened:0,replied:0};
       var openRate = vs.sent>0?Math.round((vs.opened/vs.sent)*100):0;
       var replyRate = vs.sent>0?Math.round((vs.replied/vs.sent)*100):0;
       var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd'};
@@ -617,7 +643,7 @@ function pageDash() {
         +'</div>';
     }).join('')+'</div></div>'
     +'<div class="card"><div class="label" style="color:#4ade80;margin-bottom:8px">How It Works</div>'
-    +[['1. Scan','Pull 10 companies, 2 contacts each from Apollo'],['2. Generate','Claude writes personalized emails'],['3. Review','You approve, edit, or reject each one'],['4. Send','Only approved emails go out']].map(function(s){
+    +[['1. Scan','Pull 5 companies, 1 contact each from Apollo'],['2. Generate','Claude writes personalized emails'],['3. Review','You approve, edit, or reject each one'],['4. Send','Only approved emails go out']].map(function(s){
       return '<div style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-start"><div style="font-family:Syne,sans-serif;font-size:13px;font-weight:800;color:#1a5c2e;min-width:30px">'+s[0]+'</div><div style="font-size:10px;color:#4a7a58;line-height:1.5">'+s[1]+'</div></div>';
     }).join('')+'</div></div></div>';
 }
