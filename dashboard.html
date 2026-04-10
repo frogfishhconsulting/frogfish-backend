@@ -611,7 +611,7 @@ function pageSent() {
   if(S.sentLog.length===0) return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:28px;margin-bottom:12px">&#128231;</div><div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:#4ade80;margin-bottom:8px">No Emails Sent Yet</div><div style="font-size:12px;color:#4a7a58">Approve emails in the Review Queue to build your sent log.</div></div>';
   var stats = '<div class="grid-4 mb-16">'+[['Total Sent',S.sentLog.length],['Unique Companies',new Set(S.sentLog.map(function(e){return e.company;})).size],['Seen All Time',S.seenEmails.length],['Won\'t Duplicate',S.seenEmails.length]].map(function(x){return '<div class="card"><div class="label">'+x[0]+'</div><div style="font-family:Syne,sans-serif;font-size:32px;font-weight:800;color:#4ade80">'+x[1]+'</div></div>';}).join('')+'</div>';
   var rows = S.sentLog.map(function(e){return '<div style="display:grid;grid-template-columns:1.6fr 1.2fr 60px 1fr;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #1a3320"><div><div style="font-size:12px;color:#c0e8c8">'+e.company+'</div><div style="font-size:10px;color:#2d5c3a">'+e.email+'</div></div><div style="font-size:11px;color:#9dc8a8">'+(e.contact||'')+'</div><div><span style="background:#0a0f0d;border:1px solid '+(variantColors[e.variant||'A']||'#4a7a58')+';color:'+(variantColors[e.variant||'A']||'#4a7a58')+';font-size:9px;padding:2px 8px;border-radius:2px">'+(e.variant||'A')+'</span></div><div style="font-size:10px;color:#2d5c3a">'+(e.sentAt||'')+'</div></div>';}).join('');
-  return stats+'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Sent Log</div><button class="btn-ghost btn-sm" onclick="if(confirm('Clear log?')){S.sentLog=[];set({});}">Clear</button></div>'+rows+'</div>';
+  return stats+'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Sent Log</div><button class="btn-ghost btn-sm" onclick="clearSentLog()">Clear</button></div>'+rows+'</div>';
 }
 
 function pageSettings() {
@@ -698,6 +698,7 @@ window.approveAll = approveAll;
 window.saveEdit = saveEdit;
 window.singleGen = function(id){ var l=S.leads.filter(function(x){ return x.id===id; })[0]; if(l) genSingle(l); };
 window.toggleAutoScan = toggleAutoScan;
+window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
 window.set = set;
 
 draw();
