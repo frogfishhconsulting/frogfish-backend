@@ -671,6 +671,67 @@ function saveEdit(id) {
   set({editingId:null});
 }
 
+async function doScan() {
+  if(!S.keys.apollo){ log('Apollo API key not set - go to Settings','error'); set({}); return; }
+  set({scanning:true, scanProg:0, lastError:null});
+  log('Starting scan - '+S.dailyLimit+' companies, '+S.maxPerCompany+' contact each...','info');
+  var all = [];
+  for(var i=0;i<NICHES.length;i++) {
+    var n = NICHES[i];
+    set({scanProg:Math.round((i/NICHES.length)*70)});
+    log('Querying Apollo for '+n.label+'...','info');
+    try {
+      var d = await apiPost('/apollo/search', {
+        apolloKey: S.keys.apollo, page:1, per_page:10,
+        person_titles: n.titles,
+        q_organization_keyword_tags: n.industries,
+        person_locations: ['United States'],
+        organization_num_employees_ranges: ['10,50','51,200']
+      });
+      if(d.people && d.people.length>0) {
+        var mapped = d.people.filter(function(p){ return p.email && p.email.indexOf('unknown')===-1; }).map(function(p,j){
+          var fn = p.first_name || (p.name ? p.name.split(' ')[0] : '');
+          var ln = p.last_name || (p.name ? p.name.split(' ').slice(1).join(' ') : '');
+          return {
+            id: Date.now()+i*100+j,
+            company: (p.organization&&p.organization.name)||'Unknown',
+            contact: (fn&&ln)?fn+' '+ln:(p.name||'Unknown'),
+            firstName: fn||'',
+            title: p.title||'Unknown',
+            email: p.email,
+            employees: String((p.organization&&p.organization.estimated_num_employees)||'?'),
+            spend_signal: 'Apollo verified',
+            score: scoreP(p),
+            niche: n.id,
+            location: (p.city&&p.state)?p.city+', '+p.state:'United States'
+          };
+        });
+        all = all.concat(mapped);
+        log(n.label+': '+mapped.length+' contacts found','success');
+      } else {
+        var err = d.error||d.message||d.parseError||JSON.stringify(d).slice(0,150);
+        log(n.label+': 0 results - '+err,'info');
+        set({lastError:'Apollo: '+err});
+      }
+    } catch(e){ log('Error: '+e.message,'error'); set({lastError:e.message}); }
+    await new Promise(function(r){ setTimeout(r,400); });
+  }
+  set({scanProg:100});
+  var limited = applyDailyLimits(all);
+  var seenSet = new Set(S.seenEmails.concat(S.leads.map(function(l){ return l.email; })));
+  var fresh = limited.filter(function(l){ return l.email && l.email.indexOf('unknown')===-1 && !seenSet.has(l.email); });
+  fresh.forEach(function(l){ if(S.seenEmails.indexOf(l.email)===-1) S.seenEmails.push(l.email); });
+  if(fresh.length>0) {
+    set(function(s){ return {leads:s.leads.concat(fresh)}; });
+    log('Found '+fresh.length+' new contacts - generating emails...','success');
+    await generateEmails(fresh);
+  } else {
+    log('No new leads found - all contacts already seen','info');
+    set({scanning:false, scanProg:0});
+  }
+}
+
+
 function toggleAutoScan() {
   if(S.autoScan) {
     S.autoScan = false;
@@ -697,6 +758,9 @@ window.rejectEmail = rejectEmail;
 window.approveAll = approveAll;
 window.saveEdit = saveEdit;
 window.singleGen = function(id){ var l=S.leads.filter(function(x){ return x.id===id; })[0]; if(l) genSingle(l); };
+
+function clearSentLog(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} }
+
 window.toggleAutoScan = toggleAutoScan;
 window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
 window.set = set;
