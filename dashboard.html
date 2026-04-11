@@ -134,6 +134,9 @@ function set(p){
     localStorage.setItem('ff_queue', JSON.stringify(S.reviewQueue));
     localStorage.setItem('ff_sent', JSON.stringify(S.sent));
     localStorage.setItem('ff_vstats', JSON.stringify(S.variantStats));
+    localStorage.setItem('ff_seen', JSON.stringify(S.seenEmails));
+    localStorage.setItem('ff_sentlog', JSON.stringify(S.sentLog.slice(0,1000)));
+    localStorage.setItem('ff_page', JSON.stringify(S.apolloPage));
   } catch(e) {}
   draw(); 
 }
