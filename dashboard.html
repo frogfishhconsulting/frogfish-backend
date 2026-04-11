@@ -238,7 +238,7 @@ function applyDailyLimits(leads) {
   return result;
 }
 
-function makePrompt(company, title, location, pain, niche, websiteContext, variant) {
+function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName) {
   var cs = niche==='legal'
     ? 'A firm in a similar position restructured campaigns around CRM closed case data. Cost per signed case dropped 42% in 4 months.'
     : niche==='home'
@@ -259,10 +259,35 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
   }
 
   if(variant === 'D') {
-    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT D - INTERNAL REFERRAL: Para 1: Open using a made-up first name as if they referred you internally. Pick one of: Sarah, Michael, Jessica, David, Emily, Chris. Write exactly: "I spoke with [name] at your office last week - she/he suggested I reach out to you directly about your digital marketing." Then one sharp sentence on their pain: ' + pain + '. Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
+    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT D - INTERNAL REFERRAL: Para 1: Open with exactly: "I spoke with ' + staffName + ' at your office last week - she suggested I reach out to you directly about your digital marketing." Then one sharp sentence on their pain: ' + pain + '. Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
   }
 
   return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT A - RESEARCH-BASED PATTERN INTERRUPT: Para 1: Use the research above to write ONE sharp observation about ' + company + ' that connects directly to this pain: ' + pain + '. Make them think "how did they know that?" - not a summary of their website, but an insight about their specific situation. Weave in naturally: ' + googleCred + ' Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
+}
+
+function extractStaffName(websiteText) {
+  // Look for common staff name patterns in website text
+  // Find names that appear near words like "team", "staff", "associate", "coordinator", "assistant", "specialist", "paralegal", "admin"
+  var juniorKeywords = ['coordinator', 'assistant', 'associate', 'specialist', 'paralegal', 'administrator', 'receptionist', 'office manager', 'analyst', 'consultant', 'representative', 'advisor'];
+  var text = websiteText.toLowerCase();
+  
+  // Try to find a name near junior keywords
+  for(var k=0; k<juniorKeywords.length; k++) {
+    var idx = text.indexOf(juniorKeywords[k]);
+    if(idx > 0) {
+      // Look for a capitalized name in the 100 chars before the keyword
+      var nearby = websiteText.slice(Math.max(0, idx-100), idx+50);
+      var nameMatch = nearby.match(/\b([A-Z][a-z]{2,10})\s+([A-Z][a-z]{2,12})\b/);
+      if(nameMatch) {
+        // Make sure it's not a company name or title word
+        var skipWords = ['About','Contact','Services','Our','The','Law','Group','LLC','Inc','Corp','Home','Meet','Team'];
+        if(skipWords.indexOf(nameMatch[1])===-1) {
+          return nameMatch[1]; // Return first name only
+        }
+      }
+    }
+  }
+  return null; // No junior staff name found
 }
 
 async function researchCompany(domain) {
@@ -280,7 +305,6 @@ async function researchCompany(domain) {
 
 async function generateEmails(leads) {
   log('Generating '+leads.length+' emails...','info');
-  var variants = ['A','B','C','D'];
   for(var i=0;i<leads.length;i++) {
     var l = leads[i];
     var n = NICHES.filter(function(x){ return x.id===l.niche; })[0]||NICHES[0];
@@ -293,8 +317,10 @@ async function generateEmails(leads) {
         websiteText = await researchCompany(domain);
       }
       var greeting = l.firstName ? 'Hi '+l.firstName+',' : 'Hi,';
-      var variant = variants[Math.floor(Math.random()*variants.length)];
-      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant);
+      var staffName = websiteText ? extractStaffName(websiteText) : null;
+      var availableVariants = staffName ? ['A','B','C','D'] : ['A','B','C'];
+      var variant = availableVariants[Math.floor(Math.random()*availableVariants.length)];
+      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant, staffName);
       var rawBody = await callAI(prompt);
       var cleanedBody = cleanBody(rawBody);
       // Multiple subject options per variant - randomly pick one
