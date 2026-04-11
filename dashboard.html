@@ -610,7 +610,8 @@ function pageReview() {
 function pageLeads() {
   var sl = S.selLead;
   var rows = S.leads.map(function(l) {
-    return '<div class="lead-row" onclick="pick('+l.id+')" style="'+(sl&&sl.id===l.id?'background:#0d2a14':'')+'">'
+    var rowBg = l.skipped ? 'background:#1a0a0a;opacity:0.6' : (sl&&sl.id===l.id?'background:#0d2a14':'');
+    return '<div class="lead-row" onclick="pick('+l.id+')" style="'+rowBg+'">'
       +'<div style="display:grid;grid-template-columns:1.8fr 1.4fr 1fr .7fr 50px 110px;gap:8px;align-items:center">'
       +'<div><div style="font-size:12px;color:#c0e8c8">'+l.company+'</div><div style="font-size:10px;color:#2d5c3a">'+l.spend_signal+'</div></div>'
       +'<div><div style="font-size:11px;color:#9dc8a8">'+(l.firstName?l.firstName+' '+(l.contact.split(' ').slice(1).join(' '))||l.contact:l.contact)+'</div><div style="font-size:10px;color:#2d5c3a">'+l.title+'</div></div>'
@@ -620,9 +621,11 @@ function pageLeads() {
       +(function(){
         var wasSent = S.sentLog.some(function(s){ return s.email===l.email; });
         var inQueue = S.reviewQueue.some(function(q){ return q.email===l.email && q.status==='pending'; });
+        var isSkipped = l.skipped;
         if(wasSent) return '<span style="font-size:9px;color:#4ade80;padding:5px 10px;border:1px solid #1a5c2e;border-radius:2px">&#10003; Sent</span>';
         if(inQueue) return '<span style="font-size:9px;color:#fbbf24;padding:5px 10px;border:1px solid #4a3800;border-radius:2px">&#9679; In Queue</span>';
-        return '<button class="btn btn-sm" style="font-size:9px;padding:5px 10px" onclick="event.stopPropagation();singleGen('+l.id+')">+ Email</button>';
+        if(isSkipped) return '<span style="font-size:9px;color:#f87171;padding:5px 10px;border:1px solid #5c1a1a;border-radius:2px;cursor:pointer" onclick="event.stopPropagation();skipLead('+l.id+',false)">&#10007; Skipped</span>';
+        return '<div style="display:flex;gap:4px"><button class="btn btn-sm" style="font-size:9px;padding:5px 8px" onclick="event.stopPropagation();singleGen('+l.id+')">+ Email</button><button style="background:none;border:1px solid #4a3820;color:#a07050;font-family:DM Mono,monospace;font-size:9px;padding:5px 8px;cursor:pointer;border-radius:2px" onclick="event.stopPropagation();skipLead('+l.id+',true)">Skip</button></div>';
       })()
       +'</div></div>';
   }).join('');
@@ -801,6 +804,12 @@ function clearSentLog(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} }
 
 window.toggleAutoScan = toggleAutoScan;
 window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
+window.skipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:true}):l; }); set({}); };
+window.unskipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:false}):l; }); set({}); };
+window.skipLead = function(id, skip){
+  S.leads = S.leads.map(function(l){ return l.id===id ? Object.assign({},l,{skipped:skip}) : l; });
+  set({});
+};
 window.set = set;
 
 draw();
