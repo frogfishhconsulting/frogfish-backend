@@ -356,7 +356,7 @@ async function generateEmails(leads) {
       };
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = pool[Math.floor(Math.random()*pool.length)];
-      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a quick call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -399,7 +399,7 @@ async function genSingle(lead) {
     var prompt = makePrompt(lead.company, lead.title, lead.location, n.pain, lead.niche, websiteText2);
     var rawBody = await callAI(prompt);
     var cleanedBody = cleanBody(rawBody);
-    var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a 20-min call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+    var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a quick call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
     var item = {
       id: 'rq_'+lead.id+'_'+Date.now(),
       leadId: lead.id,
@@ -474,7 +474,8 @@ async function approveEmail(id) {
     return;
   }
 
-  S.reviewQueue = S.reviewQueue.map(function(x){ return x.id===id ? Object.assign({},x,{status:'approved'}) : x; });
+  // Remove from queue, add to sent log
+  S.reviewQueue = S.reviewQueue.filter(function(x){ return x.id!==id; });
   S.editingId = null;
   S.sent = S.sent+1;
   if(item.variant && S.variantStats[item.variant]) S.variantStats[item.variant].sent++;
