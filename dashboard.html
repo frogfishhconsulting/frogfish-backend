@@ -70,7 +70,20 @@ input:focus{border-color:#4ade80}
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="login_screen" style="display:none;position:fixed;inset:0;background:#0a0f0d;align-items:center;justify-content:center;z-index:100">
+  <div style="background:#0e1a12;border:1px solid #1a3320;border-radius:4px;padding:48px;width:360px;text-align:center">
+    <div style="font-size:28px;margin-bottom:8px">&#128280;</div>
+    <div style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;color:#4ade80;margin-bottom:4px">FROGFISH</div>
+    <div style="font-size:10px;color:#2d5c3a;letter-spacing:.2em;margin-bottom:32px">BD AGENT</div>
+    <div style="margin-bottom:16px">
+      <input id="login_user" type="text" placeholder="Username" style="width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')doLogin()">
+      <input id="login_pass" type="password" placeholder="Password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login_error" style="display:none;color:#f87171;font-size:11px;margin-bottom:12px">Invalid credentials</div>
+    <button class="btn" style="width:100%" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+<div id="app" style="display:none"></div>
 <script>
 var CALENDLY = 'https://calendly.com/frogfishconsulting/discovery';
 
@@ -138,7 +151,44 @@ function set(p){
     localStorage.setItem('ff_sentlog', JSON.stringify(S.sentLog.slice(0,1000)));
     localStorage.setItem('ff_page', JSON.stringify(S.apolloPage));
   } catch(e) {}
-  draw(); 
+  // Login gate
+var LOGIN_USER = 'jared';
+var LOGIN_PASS = 'frogfish2024';
+
+function checkLogin() {
+  var stored = localStorage.getItem('ff_auth');
+  return stored === btoa(LOGIN_USER + ':' + LOGIN_PASS);
+}
+
+function doLogin() {
+  var u = document.getElementById('login_user').value.trim().toLowerCase();
+  var p = document.getElementById('login_pass').value;
+  if(u === LOGIN_USER && p === LOGIN_PASS) {
+    localStorage.setItem('ff_auth', btoa(LOGIN_USER + ':' + LOGIN_PASS));
+    document.getElementById('login_screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    draw();
+  } else {
+    document.getElementById('login_error').style.display = 'block';
+    setTimeout(function(){ document.getElementById('login_error').style.display = 'none'; }, 2000);
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem('ff_auth');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login_screen').style.display = 'flex';
+}
+
+// Show login or app
+if(checkLogin()) {
+  document.getElementById('login_screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  draw();
+} else {
+  document.getElementById('login_screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+} 
 }
 function log(m,c){ if(!c)c='info'; var t=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); S.log=[{t:t,m:m,c:c}].concat(S.log).slice(0,60); }
 
@@ -193,13 +243,13 @@ function scoreP(p) {
   // Verified email
   if(p.email && p.email.indexOf('unknown')===-1) s+=10;
 
-  // Company size - sweet spot is 20-500 employees
+  // Company size
   if(employees>=200) s+=12;
   else if(employees>=50) s+=10;
   else if(employees>=20) s+=7;
   else if(employees>=5) s+=3;
 
-  // Google Ads / paid media signals from technologies and keywords
+  // Google Ads / paid media tech stack signals
   if(technologies.indexOf('google ads')>=0 || technologies.indexOf('google adwords')>=0) s+=15;
   else if(technologies.indexOf('google tag manager')>=0 || technologies.indexOf('google analytics')>=0) s+=8;
   if(technologies.indexOf('facebook ads')>=0 || technologies.indexOf('meta ads')>=0) s+=8;
@@ -210,19 +260,33 @@ function scoreP(p) {
   if(keywords.indexOf('paid search')>=0 || keywords.indexOf('ppc')>=0 || keywords.indexOf('sem')>=0) s+=10;
   if(keywords.indexOf('google ads')>=0 || keywords.indexOf('adwords')>=0) s+=8;
 
-  // Industry fit - high value industries
+  // Industry fit
   if(industry.indexOf('legal')>=0 || industry.indexOf('law')>=0) s+=8;
   if(industry.indexOf('insurance')>=0 || industry.indexOf('financial')>=0) s+=7;
   if(industry.indexOf('hvac')>=0 || industry.indexOf('roofing')>=0 || industry.indexOf('plumbing')>=0 || industry.indexOf('home services')>=0) s+=7;
   if(industry.indexOf('solar')>=0 || industry.indexOf('real estate')>=0) s+=6;
 
-  // Revenue signals - if Apollo has annual revenue data
+  // Revenue signals
   var revenue = org.annual_revenue_printed || org.annual_revenue || 0;
   if(typeof revenue === 'string') {
     if(revenue.indexOf('M')>=0) s+=10;
     else if(revenue.indexOf('K')>=0) s+=5;
   } else if(revenue > 1000000) s+=10;
   else if(revenue > 500000) s+=6;
+
+  // Job posting signals - actively hiring for paid media = high ad spend
+  var jobPostings = (org.job_postings || []).map(function(j){ return (j.title||j||'').toLowerCase(); }).join(' ');
+  if(jobPostings.indexOf('google ads')>=0 || jobPostings.indexOf('paid search')>=0 || jobPostings.indexOf('ppc')>=0 || jobPostings.indexOf('sem manager')>=0) s+=18;
+  else if(jobPostings.indexOf('digital marketing manager')>=0 || jobPostings.indexOf('performance marketing')>=0) s+=14;
+  else if(jobPostings.indexOf('marketing manager')>=0 || jobPostings.indexOf('demand generation')>=0) s+=10;
+  else if(jobPostings.indexOf('marketing')>=0) s+=5;
+
+  // Also flag in spend_signal for display
+  if(jobPostings.indexOf('google ads')>=0 || jobPostings.indexOf('paid search')>=0 || jobPostings.indexOf('ppc')>=0) {
+    p._jobSignal = 'Hiring: Paid Search';
+  } else if(jobPostings.indexOf('digital marketing')>=0 || jobPostings.indexOf('performance marketing')>=0) {
+    p._jobSignal = 'Hiring: Digital Mktg';
+  }
 
   return Math.min(s, 99);
 }
@@ -515,7 +579,7 @@ function buildPage() {
   var tabs = ['dashboard','review','leads','sent','settings'];
   var tabLabels = {dashboard:'Dashboard', review:'Review Queue'+(pending>0?'<span class="tab-badge">'+pending+'</span>':''), leads:'Leads', sent:'Sent Log ('+S.sentLog.length+')', settings:'Settings'};
   return '<div class="header"><div class="logo"><div class="logo-icon">&#128280;</div><div><div class="logo-title">FROGFISH BD AGENT</div><div class="logo-sub">Jared Flanders - Business Development</div></div></div>'
-    +'<div style="font-size:11px;color:'+(S.scanning?'#fbbf24':'#4a7a58')+'"><span class="status-dot '+(S.scanning?'pulse':'')+'" style="background:'+(S.scanning?'#fbbf24':'#1a5c2e')+'"></span>'+(S.scanning?'SCANNING':'STANDBY')+'</div></div>'
+    +'<button onclick="doLogout()" style="background:none;border:1px solid #1a3320;color:#2d5c3a;font-family:DM Mono,monospace;font-size:9px;padding:5px 10px;cursor:pointer;border-radius:2px;margin-right:12px;letter-spacing:.1em">LOGOUT</button><div style="font-size:11px;color:'+(S.scanning?'#fbbf24':'#4a7a58')+'"><span class="status-dot '+(S.scanning?'pulse':'')+'" style="background:'+(S.scanning?'#fbbf24':'#1a5c2e')+'"></span>'+(S.scanning?'SCANNING':'STANDBY')+'</div></div>'
     +'<div class="tabs">'+tabs.map(function(t){ return '<button class="tab '+(S.tab===t?'active':'')+'" onclick="go(\''+t+'\')">'+tabLabels[t]+'</button>'; }).join('')+'</div>'
     +'<div class="content">'+(S.tab==='dashboard'?pageDash():S.tab==='review'?pageReview():S.tab==='leads'?pageLeads():S.tab==='sent'?pageSent():pageSettings())+'</div>';
 }
@@ -741,7 +805,7 @@ async function doScan() {
             title: p.title||'Unknown',
             email: p.email,
             employees: String((p.organization&&p.organization.estimated_num_employees)||'?'),
-            spend_signal: 'Apollo verified',
+            spend_signal: p._jobSignal || 'Apollo verified',
             score: scoreP(p),
             niche: n.id,
             location: (p.city&&p.state)?p.city+', '+p.state:'United States'
@@ -819,7 +883,44 @@ window.skipLead = function(id, skip){
 };
 window.set = set;
 
-draw();
+// Login gate
+var LOGIN_USER = 'jared';
+var LOGIN_PASS = 'frogfish2024';
+
+function checkLogin() {
+  var stored = localStorage.getItem('ff_auth');
+  return stored === btoa(LOGIN_USER + ':' + LOGIN_PASS);
+}
+
+function doLogin() {
+  var u = document.getElementById('login_user').value.trim().toLowerCase();
+  var p = document.getElementById('login_pass').value;
+  if(u === LOGIN_USER && p === LOGIN_PASS) {
+    localStorage.setItem('ff_auth', btoa(LOGIN_USER + ':' + LOGIN_PASS));
+    document.getElementById('login_screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    draw();
+  } else {
+    document.getElementById('login_error').style.display = 'block';
+    setTimeout(function(){ document.getElementById('login_error').style.display = 'none'; }, 2000);
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem('ff_auth');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login_screen').style.display = 'flex';
+}
+
+// Show login or app
+if(checkLogin()) {
+  document.getElementById('login_screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  draw();
+} else {
+  document.getElementById('login_screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
 
 // Poll for Instantly webhook events every 30 seconds
 async function pollEvents() {
