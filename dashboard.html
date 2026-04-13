@@ -333,28 +333,37 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
 }
 
 function extractStaffName(websiteText) {
-  // Look for common staff name patterns in website text
-  // Find names that appear near words like "team", "staff", "associate", "coordinator", "assistant", "specialist", "paralegal", "admin"
   var juniorKeywords = ['coordinator', 'assistant', 'associate', 'specialist', 'paralegal', 'administrator', 'receptionist', 'office manager', 'analyst', 'consultant', 'representative', 'advisor'];
-  var text = websiteText.toLowerCase();
+  // Words that are NOT person names - UI elements, common words, tech terms
+  var skipWords = [
+    'About','Contact','Services','Our','The','Law','Group','LLC','Inc','Corp','Home','Meet','Team',
+    'Toggle','Menu','Search','Login','Submit','Cancel','Close','Open','Back','Next','Skip','More',
+    'Learn','Read','View','Click','Here','This','That','With','From','Your','Their','These','Those',
+    'Email','Phone','Address','Location','Office','Suite','Floor','Building','Street',
+    'Google','Facebook','Twitter','LinkedIn','Instagram','Youtube','Apple','Microsoft',
+    'Privacy','Policy','Terms','Cookie','Copyright','Rights','Reserved',
+    'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday',
+    'January','February','March','April','June','July','August','September','October','November','December'
+  ];
+  // Valid first names must be 3-10 chars, only letters, not in skip list
+  var commonFirstNames = ['James','John','Robert','Michael','William','David','Richard','Joseph','Thomas','Charles','Christopher','Daniel','Matthew','Anthony','Donald','Mark','Paul','Steven','Andrew','Kenneth','Joshua','Kevin','Brian','George','Timothy','Ronald','Edward','Jason','Jeffrey','Ryan','Jacob','Gary','Nicholas','Eric','Jonathan','Stephen','Larry','Justin','Scott','Brandon','Benjamin','Samuel','Raymond','Gregory','Frank','Alexander','Patrick','Jack','Dennis','Jerry','Tyler','Aaron','Jose','Adam','Henry','Douglas','Nathan','Peter','Zachary','Kyle','Walter','Harold','Jeremy','Ethan','Carl','Arthur','Jesse','Lawrence','Dylan','Joe','Bryan','Jordan','Albert','Wayne','Billy','Steve','Louis','Ralph','Roy','Eugene','Russell','Bobby','Harry','Sean','Philip','Craig','Alan','Juan','Willie','Randy','Howard','Stanley','Leonard','Victor','Martin','Ernest','Jimmy','Todd','Travis','Roger','Fred','Terry','Raymond','Mary','Patricia','Jennifer','Linda','Barbara','Elizabeth','Susan','Jessica','Sarah','Karen','Lisa','Nancy','Betty','Margaret','Sandra','Ashley','Dorothy','Kimberly','Emily','Donna','Michelle','Carol','Amanda','Melissa','Deborah','Stephanie','Rebecca','Sharon','Laura','Cynthia','Kathleen','Amy','Angela','Shirley','Anna','Brenda','Pamela','Emma','Nicole','Helen','Samantha','Katherine','Christine','Debra','Rachel','Carolyn','Janet','Catherine','Maria','Heather','Diane','Julie','Joyce','Victoria','Kelly','Christina','Lauren','Joan','Evelyn','Olivia','Judith','Megan','Cheryl','Martha','Andrea','Frances','Hannah','Jacqueline','Ann','Gloria','Teresa','Kathryn','Sara','Janice','Julia','Marie','Madison','Grace','Judy','Theresa','Beverly','Denise','Marilyn','Amber','Danielle','Brittany','Diana','Abigail','Jane','Natalie','Lori','Tiffany','Alexis','Kayla'];
   
-  // Try to find a name near junior keywords
+  var text = websiteText.toLowerCase();
   for(var k=0; k<juniorKeywords.length; k++) {
     var idx = text.indexOf(juniorKeywords[k]);
     if(idx > 0) {
-      // Look for a capitalized name in the 100 chars before the keyword
-      var nearby = websiteText.slice(Math.max(0, idx-100), idx+50);
-      var nameMatch = nearby.match(/\b([A-Z][a-z]{2,10})\s+([A-Z][a-z]{2,12})\b/);
+      var nearby = websiteText.slice(Math.max(0, idx-150), idx+50);
+      var nameMatch = nearby.match(/\b([A-Z][a-z]{2,9})\s+([A-Z][a-z]{2,12})\b/);
       if(nameMatch) {
-        // Make sure it's not a company name or title word
-        var skipWords = ['About','Contact','Services','Our','The','Law','Group','LLC','Inc','Corp','Home','Meet','Team'];
-        if(skipWords.indexOf(nameMatch[1])===-1) {
-          return nameMatch[1]; // Return first name only
+        var firstName = nameMatch[1];
+        // Must be a known first name AND not in skip words
+        if(commonFirstNames.indexOf(firstName) !== -1 && skipWords.indexOf(firstName) === -1) {
+          return firstName;
         }
       }
     }
   }
-  return null; // No junior staff name found
+  return null;
 }
 
 async function researchCompany(domain) {
