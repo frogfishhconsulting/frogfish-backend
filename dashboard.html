@@ -143,11 +143,21 @@ var S = {
     var r = await fetch('/settings/load');
     var data = await r.json();
     if(data.keys && Object.keys(data.keys).length > 0) {
-      Object.assign(S.keys, data.keys);
+      // Load API keys (exclude internal _ prefixed state keys)
+      var apiKeys = {};
+      Object.keys(data.keys).forEach(function(k) {
+        if(k.indexOf('_')!==0) apiKeys[k] = data.keys[k];
+      });
+      if(Object.keys(apiKeys).length > 0) Object.assign(S.keys, apiKeys);
+      // Load state
+      if(data.keys._sentlog) { try { var sl = JSON.parse(data.keys._sentlog); if(sl.length > S.sentLog.length) S.sentLog = sl; } catch(e){} }
+      if(data.keys._seen) { try { var se = JSON.parse(data.keys._seen); if(se.length > S.seenEmails.length) S.seenEmails = se; } catch(e){} }
+      if(data.keys._page) { var pg = parseInt(data.keys._page); if(pg > S.apolloPage) S.apolloPage = pg; }
+      if(data.keys._vstats) { try { S.variantStats = JSON.parse(data.keys._vstats); } catch(e){} }
       localStorage.setItem('ff_k', JSON.stringify(S.keys));
       draw();
     }
-  } catch(e) { console.log('Server key load failed, using localStorage'); }
+  } catch(e) { console.log('Server load failed, using localStorage'); }
 })();
 
 var sendTimer = null;
@@ -470,6 +480,7 @@ async function generateEmails(leads) {
   }
   set({scanning:false, scanProg:0, tab:'review'});
   log('All done - review queue ready. Nothing sent yet.','meeting');
+  saveStateToServer();
 }
 
 async function genSingle(lead) {
@@ -570,6 +581,7 @@ async function approveEmail(id) {
   if(item.email && S.seenEmails.indexOf(item.email)===-1) S.seenEmails.push(item.email);
   S.sentLog.unshift({email:item.email,company:item.company,contact:item.contact,title:item.title,variant:item.variant||'A',subject:(item.body||'').split('\n')[0].replace('Subject: ',''),sentAt:new Date().toLocaleString()});
   set({});
+  saveStateToServer();
 }
 
 function rejectEmail(id) {
@@ -591,14 +603,12 @@ async function approveAll() {
 
 async function saveKeys() {
   localStorage.setItem('ff_k', JSON.stringify(S.keys));
-  // Also save to server DB so keys persist across devices
   try {
     await fetch('/settings/save', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({keys: S.keys})
     });
-    // Save Google client secret to backend memory too
     if(S.keys.googleClientSecret) {
       await fetch('/gmail/save-credentials', {
         method: 'POST',
@@ -612,6 +622,22 @@ async function saveKeys() {
   }
   set({keySaved:true});
   setTimeout(function(){ set({keySaved:false}); }, 2000);
+}
+
+// Save all critical state to server DB
+async function saveStateToServer() {
+  try {
+    await fetch('/settings/save', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({keys: {
+        _sentlog: JSON.stringify(S.sentLog.slice(0,500)),
+        _seen: JSON.stringify(S.seenEmails),
+        _page: String(S.apolloPage),
+        _vstats: JSON.stringify(S.variantStats)
+      }})
+    });
+  } catch(e) {}
 }
 
 function draw() { document.getElementById('app').innerHTML = buildPage(); }
