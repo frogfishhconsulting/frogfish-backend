@@ -146,17 +146,55 @@ app.post("/gmail/check-replies", async (req, res) => {
   try {
     const token = await getAccessToken();
     const replies = [];
-    for (const sent of (sentEmails || []).slice(0, 20)) {
+    for (const sent of (sentEmails || []).slice(0, 50)) {
       const query = `from:${sent.email} in:inbox`;
       const searchRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=1`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=3`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await searchRes.json();
-      if (data.messages && data.messages.length > 0) replies.push({ email: sent.email });
+      if (data.messages && data.messages.length > 0) {
+        // Fetch the actual message content
+        for (const msg of data.messages) {
+          const msgRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const msgData = await msgRes.json();
+          // Extract subject and body
+          const headers = msgData.payload?.headers || [];
+          const subject = headers.find(h => h.name === 'Subject')?.value || '';
+          const from = headers.find(h => h.name === 'From')?.value || sent.email;
+          const date = headers.find(h => h.name === 'Date')?.value || '';
+          // Get body text
+          let body = '';
+          const parts = msgData.payload?.parts || [msgData.payload];
+          for (const part of parts) {
+            if (part?.mimeType === 'text/plain' && part?.body?.data) {
+              body = Buffer.from(part.body.data, 'base64').toString('utf-8').slice(0, 500);
+              break;
+            }
+          }
+          if (!body && msgData.payload?.body?.data) {
+            body = Buffer.from(msgData.payload.body.data, 'base64').toString('utf-8').slice(0, 500);
+          }
+          replies.push({ 
+            email: sent.email, 
+            company: sent.company,
+            contact: sent.contact,
+            messageId: msg.id,
+            subject, from, date,
+            body: body.trim(),
+            threadId: msgData.threadId
+          });
+        }
+      }
     }
     res.json({ connected: true, replies });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { 
+    console.error("Reply check error:", e.message);
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
 app.get("/gmail/status", (req, res) => {
