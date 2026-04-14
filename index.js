@@ -24,6 +24,14 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Restore gmail tokens from DB
+    const result = await pool.query("SELECT value FROM settings WHERE key = 'gmail_tokens'");
+    if (result.rows.length > 0) {
+      const tokens = JSON.parse(result.rows[0].value);
+      global.gmailTokens = tokens;
+      global.gmailTokenExpiry = Date.now() + 3500000; // ~1hr, will refresh on next use
+      console.log("Gmail tokens restored from DB");
+    }
     console.log("DB initialized");
   } catch(e) {
     console.error("DB init error:", e.message);
@@ -97,6 +105,14 @@ app.get("/auth/gmail/callback", async (req, res) => {
     if (tokens.error) return res.status(400).send("Token error: " + tokens.error_description);
     global.gmailTokens = tokens;
     global.gmailTokenExpiry = Date.now() + (tokens.expires_in * 1000);
+    // Persist tokens to DB
+    try {
+      await pool.query(
+        `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        ['gmail_tokens', JSON.stringify(tokens)]
+      );
+    } catch(e) { console.error("Failed to save gmail tokens:", e.message); }
     console.log("Gmail connected");
     res.send(`<html><body style="font-family:monospace;background:#0a0f0d;color:#4ade80;padding:40px;text-align:center">
       <h2>✓ Gmail Connected</h2><p>You can close this tab.</p>
