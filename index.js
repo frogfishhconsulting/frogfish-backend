@@ -2,66 +2,118 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
+const { Pool } = require("pg");
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// Initialize DB table
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log("DB initialized");
+  } catch(e) {
+    console.error("DB init error:", e.message);
+  }
+}
+initDB();
+
+// Save keys to DB
+app.post("/settings/save", async (req, res) => {
+  const { keys } = req.body;
+  if (!keys) return res.status(400).json({ error: "No keys provided" });
+  try {
+    for (const [key, value] of Object.entries(keys)) {
+      if (value) {
+        await pool.query(
+          `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+          [key, value]
+        );
+      }
+    }
+    res.json({ saved: true });
+  } catch(e) {
+    console.error("Save error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Load keys from DB
+app.get("/settings/load", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT key, value FROM settings");
+    const keys = {};
+    result.rows.forEach(row => { keys[row.key] = row.value; });
+    res.json({ keys });
+  } catch(e) {
+    console.error("Load error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
-// Gmail OAuth flow
+// Gmail OAuth
 app.get("/auth/gmail", (req, res) => {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientId = req.query.clientId || process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) return res.status(400).send("Missing Google Client ID. Add it in Settings.");
   const redirectUri = "https://frogfish-backend-production.up.railway.app/auth/gmail/callback";
   const scope = "https://www.googleapis.com/auth/gmail.readonly";
-  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${encodeURIComponent(clientId)}`;
   res.redirect(url);
 });
 
 app.get("/auth/gmail/callback", async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) return res.status(400).send("No code received");
+  const clientId = state || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = global.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientSecret) return res.status(400).send("Missing Google Client Secret.");
   try {
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret,
         redirect_uri: "https://frogfish-backend-production.up.railway.app/auth/gmail/callback",
-        grant_type: "authorization_code"
-      })
+        grant_type: "authorization_code" })
     });
     const tokens = await tokenRes.json();
     if (tokens.error) return res.status(400).send("Token error: " + tokens.error_description);
-    // Store tokens in memory (persists until Railway restarts)
     global.gmailTokens = tokens;
     global.gmailTokenExpiry = Date.now() + (tokens.expires_in * 1000);
-    console.log("Gmail connected successfully");
+    console.log("Gmail connected");
     res.send(`<html><body style="font-family:monospace;background:#0a0f0d;color:#4ade80;padding:40px;text-align:center">
-      <h2>✓ Gmail Connected</h2>
-      <p>You can close this tab and return to the dashboard.</p>
+      <h2>✓ Gmail Connected</h2><p>You can close this tab.</p>
       <script>setTimeout(function(){ window.close(); }, 2000);</script>
     </body></html>`);
-  } catch (e) {
-    res.status(500).send("Error: " + e.message);
-  }
+  } catch(e) { res.status(500).send("Error: " + e.message); }
 });
 
-// Get fresh access token using refresh token
 async function getAccessToken() {
   if (!global.gmailTokens) return null;
   if (Date.now() < global.gmailTokenExpiry - 60000) return global.gmailTokens.access_token;
-  // Refresh
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      client_id: global.googleClientId || process.env.GOOGLE_CLIENT_ID,
+      client_secret: global.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET,
       refresh_token: global.gmailTokens.refresh_token,
       grant_type: "refresh_token"
     })
@@ -72,9 +124,8 @@ async function getAccessToken() {
   return tokens.access_token;
 }
 
-// Check Gmail for replies to sent emails
 app.post("/gmail/check-replies", async (req, res) => {
-  const { sentEmails } = req.body; // array of {email, subject, sentAt}
+  const { sentEmails } = req.body;
   if (!global.gmailTokens) return res.json({ connected: false });
   try {
     const token = await getAccessToken();
@@ -86,18 +137,20 @@ app.post("/gmail/check-replies", async (req, res) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await searchRes.json();
-      if (data.messages && data.messages.length > 0) {
-        replies.push({ email: sent.email, messageId: data.messages[0].id });
-      }
+      if (data.messages && data.messages.length > 0) replies.push({ email: sent.email });
     }
     res.json({ connected: true, replies });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get("/gmail/status", (req, res) => {
   res.json({ connected: !!global.gmailTokens });
+});
+
+app.post("/gmail/save-credentials", (req, res) => {
+  const { clientSecret } = req.body;
+  if (clientSecret) global.googleClientSecret = clientSecret;
+  res.json({ saved: true });
 });
 
 app.post("/apollo/search", async (req, res) => {
@@ -133,7 +186,7 @@ app.post("/apollo/search", async (req, res) => {
       return person;
     }));
     res.json({ ...searchData, people: enriched });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post("/research/company", async (req, res) => {
@@ -146,17 +199,10 @@ app.post("/research/company", async (req, res) => {
       signal: AbortSignal.timeout(5000)
     });
     const html = await r.text();
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 2000);
+    const text = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     res.json({ text, domain });
-  } catch (e) {
-    res.json({ text: '', domain, error: e.message });
-  }
+  } catch(e) { res.json({ text: '', domain, error: e.message }); }
 });
 
 app.post("/instantly/send", async (req, res) => {
@@ -166,33 +212,23 @@ app.post("/instantly/send", async (req, res) => {
     const headers = { "Authorization": `Bearer ${instantlyKey}`, "Content-Type": "application/json" };
     const campRes = await fetch("https://api.instantly.ai/api/v2/campaigns?limit=10", { headers });
     const campData = await campRes.json();
-    console.log("campaigns:", JSON.stringify(campData).slice(0, 300));
     const campList = campData.items || (Array.isArray(campData) ? campData : []);
-    if (!campList.length) return res.json({ error: "No campaigns found. Check API key has campaigns:all scope." });
+    if (!campList.length) return res.json({ error: "No campaigns found." });
     const campaignId = campList[0].id;
     const leadRes = await fetch("https://api.instantly.ai/api/v2/leads/add", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        campaign_id: campaignId,
-        leads: [{ email: to, personalization: body, custom_variables: { subject: String(subject) } }]
-      })
+      method: "POST", headers,
+      body: JSON.stringify({ campaign_id: campaignId, leads: [{ email: to, personalization: body, custom_variables: { subject: String(subject) } }] })
     });
     const leadData = await leadRes.json();
-    console.log("lead result:", JSON.stringify(leadData).slice(0, 300));
     if (leadData.error) return res.json({ error: JSON.stringify(leadData.error) });
     if (leadData.leads_uploaded === 0) return res.json({ error: "Lead not uploaded - " + JSON.stringify(leadData) });
-    res.json({ success: true, campaign: campaignId, result: leadData });
-  } catch (e) {
-    console.error("Instantly error:", e.message);
-    res.status(500).json({ error: e.message });
-  }
+    res.json({ success: true, campaign: campaignId });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post("/webhook/instantly", async (req, res) => {
-  const event = req.body;
+app.post("/webhook/instantly", (req, res) => {
   if (!global.webhookEvents) global.webhookEvents = [];
-  global.webhookEvents.unshift({ ...event, receivedAt: new Date().toISOString() });
+  global.webhookEvents.unshift({ ...req.body, receivedAt: new Date().toISOString() });
   global.webhookEvents = global.webhookEvents.slice(0, 100);
   res.json({ received: true });
 });
