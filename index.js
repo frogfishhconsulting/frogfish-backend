@@ -11,6 +11,95 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
+// Gmail OAuth flow
+app.get("/auth/gmail", (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = "https://frogfish-backend-production.up.railway.app/auth/gmail/callback";
+  const scope = "https://www.googleapis.com/auth/gmail.readonly";
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+  res.redirect(url);
+});
+
+app.get("/auth/gmail/callback", async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.status(400).send("No code received");
+  try {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: "https://frogfish-backend-production.up.railway.app/auth/gmail/callback",
+        grant_type: "authorization_code"
+      })
+    });
+    const tokens = await tokenRes.json();
+    if (tokens.error) return res.status(400).send("Token error: " + tokens.error_description);
+    // Store tokens in memory (persists until Railway restarts)
+    global.gmailTokens = tokens;
+    global.gmailTokenExpiry = Date.now() + (tokens.expires_in * 1000);
+    console.log("Gmail connected successfully");
+    res.send(`<html><body style="font-family:monospace;background:#0a0f0d;color:#4ade80;padding:40px;text-align:center">
+      <h2>✓ Gmail Connected</h2>
+      <p>You can close this tab and return to the dashboard.</p>
+      <script>setTimeout(function(){ window.close(); }, 2000);</script>
+    </body></html>`);
+  } catch (e) {
+    res.status(500).send("Error: " + e.message);
+  }
+});
+
+// Get fresh access token using refresh token
+async function getAccessToken() {
+  if (!global.gmailTokens) return null;
+  if (Date.now() < global.gmailTokenExpiry - 60000) return global.gmailTokens.access_token;
+  // Refresh
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: global.gmailTokens.refresh_token,
+      grant_type: "refresh_token"
+    })
+  });
+  const tokens = await res.json();
+  global.gmailTokens.access_token = tokens.access_token;
+  global.gmailTokenExpiry = Date.now() + (tokens.expires_in * 1000);
+  return tokens.access_token;
+}
+
+// Check Gmail for replies to sent emails
+app.post("/gmail/check-replies", async (req, res) => {
+  const { sentEmails } = req.body; // array of {email, subject, sentAt}
+  if (!global.gmailTokens) return res.json({ connected: false });
+  try {
+    const token = await getAccessToken();
+    const replies = [];
+    for (const sent of (sentEmails || []).slice(0, 20)) {
+      const query = `from:${sent.email} in:inbox`;
+      const searchRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await searchRes.json();
+      if (data.messages && data.messages.length > 0) {
+        replies.push({ email: sent.email, messageId: data.messages[0].id });
+      }
+    }
+    res.json({ connected: true, replies });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/gmail/status", (req, res) => {
+  res.json({ connected: !!global.gmailTokens });
+});
+
 app.post("/apollo/search", async (req, res) => {
   const { apolloKey, ...params } = req.body;
   if (!apolloKey) return res.status(400).json({ error: "Missing Apollo API key" });
@@ -75,26 +164,18 @@ app.post("/instantly/send", async (req, res) => {
   if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
     const headers = { "Authorization": `Bearer ${instantlyKey}`, "Content-Type": "application/json" };
-
-    // Get campaigns
     const campRes = await fetch("https://api.instantly.ai/api/v2/campaigns?limit=10", { headers });
     const campData = await campRes.json();
     console.log("campaigns:", JSON.stringify(campData).slice(0, 300));
     const campList = campData.items || (Array.isArray(campData) ? campData : []);
-    if (!campList.length) return res.json({ error: "No campaigns found. Check API key has campaigns:all scope and you are on Growth plan." });
+    if (!campList.length) return res.json({ error: "No campaigns found. Check API key has campaigns:all scope." });
     const campaignId = campList[0].id;
-
-    // Add lead - campaign_id at top level, leads array contains lead objects
     const leadRes = await fetch("https://api.instantly.ai/api/v2/leads/add", {
       method: "POST",
       headers,
       body: JSON.stringify({
         campaign_id: campaignId,
-        leads: [{
-          email: to,
-          personalization: body,
-          custom_variables: { subject: String(subject) }
-        }]
+        leads: [{ email: to, personalization: body, custom_variables: { subject: String(subject) } }]
       })
     });
     const leadData = await leadRes.json();
@@ -108,18 +189,14 @@ app.post("/instantly/send", async (req, res) => {
   }
 });
 
-// Instantly webhook receiver - tracks opens, clicks, replies
 app.post("/webhook/instantly", async (req, res) => {
   const event = req.body;
-  console.log("Instantly webhook:", JSON.stringify(event).slice(0, 300));
-  // Store event for dashboard to poll
   if (!global.webhookEvents) global.webhookEvents = [];
   global.webhookEvents.unshift({ ...event, receivedAt: new Date().toISOString() });
-  global.webhookEvents = global.webhookEvents.slice(0, 100); // keep last 100
+  global.webhookEvents = global.webhookEvents.slice(0, 100);
   res.json({ received: true });
 });
 
-// Dashboard polls this to get latest analytics events
 app.get("/webhook/events", (req, res) => {
   res.json(global.webhookEvents || []);
 });
