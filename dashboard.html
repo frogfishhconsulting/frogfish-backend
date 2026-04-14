@@ -133,6 +133,7 @@ var S = {
     var se = localStorage.getItem('ff_seen'); if(se) S.seenEmails = JSON.parse(se);
     var sl2 = localStorage.getItem('ff_sentlog'); if(sl2) S.sentLog = JSON.parse(sl2);
     var sp = localStorage.getItem('ff_page'); if(sp) S.apolloPage = JSON.parse(sp);
+    var sr = localStorage.getItem('ff_replies'); if(sr) S.replies = JSON.parse(sr);
   } catch(e) { console.log('Restore error:', e); }
 })();
 
@@ -163,6 +164,7 @@ function set(p){
     localStorage.setItem('ff_seen', JSON.stringify(S.seenEmails));
     localStorage.setItem('ff_sentlog', JSON.stringify(S.sentLog.slice(0,1000)));
     localStorage.setItem('ff_page', JSON.stringify(S.apolloPage));
+    localStorage.setItem('ff_replies', JSON.stringify(S.replies.slice(0,200)));
   } catch(e) {}
   // Login gate
 var LOGIN_USER = 'jared';
@@ -616,12 +618,13 @@ function draw() { document.getElementById('app').innerHTML = buildPage(); }
 
 function buildPage() {
   var pending = S.reviewQueue.filter(function(x){ return x.status==='pending'; }).length;
-  var tabs = ['dashboard','review','leads','sent','settings'];
-  var tabLabels = {dashboard:'Dashboard', review:'Review Queue'+(pending>0?'<span class="tab-badge">'+pending+'</span>':''), leads:'Leads', sent:'Sent Log ('+S.sentLog.length+')', settings:'Settings'};
+  var replyCount = S.replies.filter(function(r){ return !r.read; }).length;
+  var tabs = ['dashboard','review','leads','sent','replies','settings'];
+  var tabLabels = {dashboard:'Dashboard', review:'Review Queue'+(pending>0?'<span class="tab-badge">'+pending+'</span>':''), leads:'Leads', sent:'Sent Log ('+S.sentLog.length+')', replies:'Replies'+(replyCount>0?'<span class="tab-badge">'+replyCount+'</span>':''), settings:'Settings'};
   return '<div class="header"><div class="logo"><div class="logo-icon">&#128280;</div><div><div class="logo-title">FROGFISH BD AGENT</div><div class="logo-sub">Jared Flanders - Business Development</div></div></div>'
     +'<button onclick="doLogout()" style="background:none;border:1px solid #1a3320;color:#2d5c3a;font-family:DM Mono,monospace;font-size:9px;padding:5px 10px;cursor:pointer;border-radius:2px;margin-right:12px;letter-spacing:.1em">LOGOUT</button><div style="font-size:11px;color:'+(S.scanning?'#fbbf24':'#4a7a58')+'"><span class="status-dot '+(S.scanning?'pulse':'')+'" style="background:'+(S.scanning?'#fbbf24':'#1a5c2e')+'"></span>'+(S.scanning?'SCANNING':'STANDBY')+'</div></div>'
     +'<div class="tabs">'+tabs.map(function(t){ return '<button class="tab '+(S.tab===t?'active':'')+'" onclick="go(\''+t+'\')">'+tabLabels[t]+'</button>'; }).join('')+'</div>'
-    +'<div class="content">'+(S.tab==='dashboard'?pageDash():S.tab==='review'?pageReview():S.tab==='leads'?pageLeads():S.tab==='sent'?pageSent():pageSettings())+'</div>';
+    +'<div class="content">'+(S.tab==='dashboard'?pageDash():S.tab==='review'?pageReview():S.tab==='leads'?pageLeads():S.tab==='sent'?pageSent():S.tab==='replies'?pageReplies():pageSettings())+'</div>';
 }
 
 function pageDash() {
@@ -757,6 +760,40 @@ function pageSent() {
   var stats = '<div class="grid-4 mb-16">'+[['Total Sent',S.sentLog.length],['Unique Companies',new Set(S.sentLog.map(function(e){return e.company;})).size],['Seen All Time',S.seenEmails.length],['Won\'t Duplicate',S.seenEmails.length]].map(function(x){return '<div class="card"><div class="label">'+x[0]+'</div><div style="font-family:Syne,sans-serif;font-size:32px;font-weight:800;color:#4ade80">'+x[1]+'</div></div>';}).join('')+'</div>';
   var rows = S.sentLog.map(function(e){return '<div style="display:grid;grid-template-columns:1.6fr 1.2fr 60px 60px 1fr;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #1a3320"><div><div style="font-size:12px;color:#c0e8c8">'+e.company+'</div><div style="font-size:10px;color:#2d5c3a">'+e.email+'</div></div><div style="font-size:11px;color:#9dc8a8">'+(e.contact||'')+'</div><div><span style="background:#0a0f0d;border:1px solid '+(variantColors[e.variant||'A']||'#4a7a58')+';color:'+(variantColors[e.variant||'A']||'#4a7a58')+';font-size:9px;padding:2px 8px;border-radius:2px">'+(e.variant||'A')+'</span></div><div>'+(e.replied?'<span style="color:#c4b5fd;font-size:10px">&#9993; Replied</span>':'')+'</div><div style="font-size:10px;color:#2d5c3a">'+(e.sentAt||'')+'</div></div>';}).join('');
   return stats+'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Sent Log</div><button class="btn-ghost btn-sm" onclick="clearSentLog()">Clear</button></div>'+rows+'</div>';
+}
+
+function pageReplies() {
+  var unread = S.replies.filter(function(r){ return !r.read; }).length;
+  if(S.replies.length===0) {
+    return '<div class="card" style="text-align:center;padding:40px">'
+      +'<div style="font-size:32px;margin-bottom:12px">&#9993;</div>'
+      +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:#4ade80;margin-bottom:8px">No Replies Yet</div>'
+      +'<div style="font-size:12px;color:#4a7a58">'+(S.gmailConnected?'Gmail is connected. Replies will appear here automatically.':'Connect Gmail in Settings to track replies.')+'</div>'
+      +'</div>';
+  }
+  var cards = S.replies.map(function(r, idx) {
+    return '<div class="card" style="'+(r.read?'opacity:.8':'border-color:#c4b5fd')+';margin-bottom:12px" onclick="markRead('+idx+')">'
+      +'<div class="flex-between mb-8">'
+      +'<div>'
+      +'<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:'+(r.read?'#c0e8c8':'#c4b5fd')+'">'+(r.company||r.email)+'</div>'
+      +'<div style="font-size:11px;color:#4a7a58;margin-top:2px">'+(r.contact||'')+' &middot; '+r.email+'</div>'
+      +'</div>'
+      +'<div style="text-align:right">'
+      +(r.read?'':'<span style="background:#2a1a4a;border:1px solid #c4b5fd;color:#c4b5fd;font-size:9px;padding:2px 8px;border-radius:2px;margin-bottom:4px;display:block">NEW</span>')
+      +'<div style="font-size:9px;color:#2d5c3a">'+(r.receivedAt||r.date||'')+'</div>'
+      +'</div>'
+      +'</div>'
+      +'<div style="background:#060c08;border:1px solid #1a3320;border-radius:2px;padding:12px;margin-bottom:8px">'
+      +'<div style="font-size:9px;color:#2d5c3a;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">Subject</div>'
+      +'<div style="font-size:12px;color:#4ade80">'+(r.subject||'Re: your email')+'</div>'
+      +'</div>'
+      +'<div style="font-size:12px;color:#b0d4b8;line-height:1.7;white-space:pre-wrap">'+(r.body||'[No preview available]')+'</div>'
+      +'</div>';
+  }).join('');
+  return '<div class="card mb-16"><div class="flex-between"><div><div class="label" style="color:#4ade80;margin-bottom:4px">Replies</div>'
+    +'<div style="font-size:11px;color:#c4b5fd">'+S.replies.length+' total &middot; '+unread+' unread</div></div>'
+    +'<button class="btn-ghost btn-sm" onclick="S.replies=S.replies.map(function(r){return Object.assign({},r,{read:true})});set({})">Mark All Read</button>'
+    +'</div></div>'+cards;
 }
 
 function pageSettings() {
@@ -933,6 +970,7 @@ window.connectGmail = async function() {
   window.open('/auth/gmail?clientId='+encodeURIComponent(S.keys.googleClientId), '_blank');
 };
 window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
+window.markRead = function(idx){ if(S.replies[idx]) S.replies[idx].read=true; set({}); };
 window.skipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:true}):l; }); set({}); };
 window.unskipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:false}):l; }); set({}); };
 window.skipLead = function(id, skip){
@@ -1000,16 +1038,23 @@ async function pollEvents() {
       });
       var replyData = await replyRes.json();
       if(replyData.replies && replyData.replies.length > 0) {
+        var newReplies = false;
         replyData.replies.forEach(function(r) {
+          // Check if we already have this reply stored
+          var exists = S.replies.some(function(x){ return x.messageId===r.messageId; });
+          if(!exists) {
+            S.replies.unshift(Object.assign({}, r, {read: false, receivedAt: new Date().toLocaleString()}));
+            newReplies = true;
+            log('Reply from '+r.email+'!','reply');
+          }
+          // Mark sent log item as replied
           var logItem = S.sentLog.filter(function(s){ return s.email===r.email; })[0];
           if(logItem && !logItem.replied) {
             logItem.replied = true;
-            S.booked = S.booked; 
-            log('Reply detected from '+r.email+'!','reply');
             if(logItem.variant && S.variantStats[logItem.variant]) S.variantStats[logItem.variant].replied++;
           }
         });
-        set({});
+        if(newReplies) set({});
       }
     }
     var r = await fetch('/webhook/events');
