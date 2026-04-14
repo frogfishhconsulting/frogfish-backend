@@ -618,7 +618,7 @@ function draw() { document.getElementById('app').innerHTML = buildPage(); }
 
 function buildPage() {
   var pending = S.reviewQueue.filter(function(x){ return x.status==='pending'; }).length;
-  var replyCount = S.replies.filter(function(r){ return !r.read; }).length;
+  var replyCount = (S.replies||[]).filter(function(r){ return !r.read; }).length;
   var tabs = ['dashboard','review','leads','sent','replies','settings'];
   var tabLabels = {dashboard:'Dashboard', review:'Review Queue'+(pending>0?'<span class="tab-badge">'+pending+'</span>':''), leads:'Leads', sent:'Sent Log ('+S.sentLog.length+')', replies:'Replies'+(replyCount>0?'<span class="tab-badge">'+replyCount+'</span>':''), settings:'Settings'};
   return '<div class="header"><div class="logo"><div class="logo-icon">&#128280;</div><div><div class="logo-title">FROGFISH BD AGENT</div><div class="logo-sub">Jared Flanders - Business Development</div></div></div>'
