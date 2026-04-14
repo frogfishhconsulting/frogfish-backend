@@ -2,20 +2,30 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
-const { Pool } = require("pg");
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-// PostgreSQL connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+// PostgreSQL connection - graceful fallback if not available
+let pool = null;
+try {
+  const { Pool } = require("pg");
+  if (process.env.DATABASE_URL) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
+    console.log("PostgreSQL pool created");
+  } else {
+    console.log("No DATABASE_URL - using memory storage only");
+  }
+} catch(e) {
+  console.log("pg not available:", e.message);
+}
 
 // Initialize DB table
 async function initDB() {
+  if (!pool) return;
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -43,6 +53,7 @@ initDB();
 app.post("/settings/save", async (req, res) => {
   const { keys } = req.body;
   if (!keys) return res.status(400).json({ error: "No keys provided" });
+  if (!pool) return res.json({ saved: true, note: "no db" });
   try {
     for (const [key, value] of Object.entries(keys)) {
       if (value) {
@@ -62,6 +73,7 @@ app.post("/settings/save", async (req, res) => {
 
 // Load keys from DB
 app.get("/settings/load", async (req, res) => {
+  if (!pool) return res.json({ keys: {} });
   try {
     const result = await pool.query("SELECT key, value FROM settings");
     const keys = {};
