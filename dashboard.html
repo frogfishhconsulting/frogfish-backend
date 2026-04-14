@@ -123,7 +123,7 @@ var S = {
   showK: {}, keySaved: false
 };
 
-// Restore persisted state
+// Restore persisted state from localStorage
 (function(){
   try {
     var sl = localStorage.getItem('ff_leads'); if(sl) S.leads = JSON.parse(sl);
@@ -134,6 +134,19 @@ var S = {
     var sl2 = localStorage.getItem('ff_sentlog'); if(sl2) S.sentLog = JSON.parse(sl2);
     var sp = localStorage.getItem('ff_page'); if(sp) S.apolloPage = JSON.parse(sp);
   } catch(e) { console.log('Restore error:', e); }
+})();
+
+// Load API keys from server DB (persists across devices)
+(async function(){
+  try {
+    var r = await fetch('/settings/load');
+    var data = await r.json();
+    if(data.keys && Object.keys(data.keys).length > 0) {
+      Object.assign(S.keys, data.keys);
+      localStorage.setItem('ff_k', JSON.stringify(S.keys));
+      draw();
+    }
+  } catch(e) { console.log('Server key load failed, using localStorage'); }
 })();
 
 var sendTimer = null;
@@ -574,11 +587,29 @@ async function approveAll() {
   log('All done - '+pending.length+' emails processed','success');
 }
 
-function saveKeys() {
+async function saveKeys() {
   localStorage.setItem('ff_k', JSON.stringify(S.keys));
+  // Also save to server DB so keys persist across devices
+  try {
+    await fetch('/settings/save', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({keys: S.keys})
+    });
+    // Save Google client secret to backend memory too
+    if(S.keys.googleClientSecret) {
+      await fetch('/gmail/save-credentials', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({clientSecret: S.keys.googleClientSecret})
+      });
+    }
+    log('Keys saved to server - available on all devices','success');
+  } catch(e) {
+    log('Keys saved locally only','info');
+  }
   set({keySaved:true});
   setTimeout(function(){ set({keySaved:false}); }, 2000);
-  log('Keys saved','success');
 }
 
 function draw() { document.getElementById('app').innerHTML = buildPage(); }
@@ -736,10 +767,12 @@ function pageSettings() {
     +'<div><div class="label mb-4">Max Contacts Per Company</div><input type="number" value="'+S.maxPerCompany+'" min="1" max="5" oninput="S.maxPerCompany=parseInt(this.value)||2"><div style="font-size:9px;color:#1a5c2e;margin-top:4px">Max emails per company per day</div></div>'
     +'</div></div>'
     +'<div class="card mb-16"><div class="flex-between mb-16"><div class="label" style="color:#4ade80">API Keys</div>'+(S.keySaved?'<span style="font-size:10px;color:#4ade80">Saved</span>':'')+'</div>'
-    +'<div class="grid-3 mb-16">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
     +[{id:'anthropic',label:'Anthropic',ph:'sk-ant-...',hint:'console.anthropic.com'},
       {id:'apollo',label:'Apollo.io',ph:'service_...',hint:'app.apollo.io - Settings - API'},
-      {id:'instantly',label:'Instantly.ai',ph:'inst_...',hint:'app.instantly.ai - Settings - API'}
+      {id:'instantly',label:'Instantly.ai',ph:'inst_...',hint:'app.instantly.ai - Settings - API'},
+      {id:'googleClientId',label:'Google Client ID',ph:'475197...apps.googleusercontent.com',hint:'console.cloud.google.com - Credentials'},
+      {id:'googleClientSecret',label:'Google Client Secret',ph:'GOCSPX-...',hint:'console.cloud.google.com - Credentials'}
     ].map(function(k){
       var s = ks(k.id);
       return '<div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><div class="label">'+k.label+'</div><div style="font-size:9px;color:'+s.c+'">'+s.l+'</div></div>'
@@ -758,7 +791,7 @@ function pageSettings() {
       {n:'02',t:'Apollo.io Basic',d:'API access enabled',done:!!S.keys.apollo},
       {n:'03',t:'Instantly Connected',d:'IMAP enabled + inbox warming',done:!!S.keys.instantly},
       {n:'04',t:'Railway Backend',d:'Live at railway.app',done:true},
-      {n:'05',t:'Gmail Connected',d:'Click to connect for reply tracking',done:S.gmailConnected,action:'<a href="/auth/gmail" target="_blank" style="color:#4ade80;font-size:10px;text-decoration:none">Connect Gmail →</a>'}
+      {n:'05',t:'Gmail Connected',d:'Click to connect for reply tracking',done:S.gmailConnected,action:'<button onclick="connectGmail()" style="background:none;border:1px solid #4ade80;color:#4ade80;font-family:DM Mono,monospace;font-size:9px;padding:4px 10px;cursor:pointer;border-radius:2px">Connect Gmail →</button>'}
     ].map(function(i){
       return '<div style="background:#060c08;border:1px solid '+(i.done?'#1a5c2e':'#1a3320')+';padding:12px;border-radius:2px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'
         +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+(i.done?'#4ade80':'#1a5c2e')+'">'+i.n+'</div>'
@@ -885,6 +918,20 @@ window.singleGen = function(id){ var l=S.leads.filter(function(x){ return x.id==
 function clearSentLog(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} }
 
 window.toggleAutoScan = toggleAutoScan;
+window.connectGmail = async function() {
+  if(!S.keys.googleClientId || !S.keys.googleClientSecret) {
+    alert('Please add your Google Client ID and Client Secret in Settings first, then save keys.');
+    return;
+  }
+  // Save client secret to backend first
+  await fetch('/gmail/save-credentials', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({clientSecret: S.keys.googleClientSecret})
+  });
+  // Then redirect to OAuth
+  window.open('/auth/gmail?clientId='+encodeURIComponent(S.keys.googleClientId), '_blank');
+};
 window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
 window.skipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:true}):l; }); set({}); };
 window.unskipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:false}):l; }); set({}); };
