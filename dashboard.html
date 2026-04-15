@@ -114,7 +114,7 @@ var S = {
   variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
-  dailyLimit: 20, maxPerCompany: 1,
+  dailyLimit: 50, maxPerCompany: 1,
   autoScan: false, autoScanInterval: null, apolloPage: 1, gmailConnected: false,
   log: [
     {t:'09:14 AM', m:'Agent ready - run a scan to get started', c:'info'}
@@ -966,7 +966,7 @@ async function doScan() {
     log('Querying Apollo for '+n.label+'...','info');
     try {
       var d = await apiPost('/apollo/search', {
-        apolloKey: S.keys.apollo, page:S.apolloPage, per_page:25,
+        apolloKey: S.keys.apollo, page:S.apolloPage, per_page:20,
         person_titles: n.titles,
         q_organization_keyword_tags: n.industries,
         person_locations: ['United States'],
