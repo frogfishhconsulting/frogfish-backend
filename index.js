@@ -34,6 +34,7 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Also use settings table for sentlog and seen emails (stored as JSON)
     // Restore gmail tokens from DB
     const result = await pool.query("SELECT value FROM settings WHERE key = 'gmail_tokens'");
     if (result.rows.length > 0) {
@@ -272,7 +273,7 @@ app.post("/research/company", async (req, res) => {
 });
 
 app.post("/instantly/send", async (req, res) => {
-  const { instantlyKey, to, subject, body } = req.body;
+  const { instantlyKey, to, subject, body, firstName, company, niche } = req.body;
   if (!instantlyKey) return res.status(400).json({ error: "Missing Instantly key" });
   try {
     const headers = { "Authorization": `Bearer ${instantlyKey}`, "Content-Type": "application/json" };
@@ -281,9 +282,46 @@ app.post("/instantly/send", async (req, res) => {
     const campList = campData.items || (Array.isArray(campData) ? campData : []);
     if (!campList.length) return res.json({ error: "No campaigns found." });
     const campaignId = campList[0].id;
+
+    // Build follow-up sequence personalization
+    const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
+    const nicheLabel = niche === 'legal' ? 'law firms' : niche === 'home' ? 'home service companies' : 'financial firms';
+    const followUp2 = `${greeting}
+
+Just wanted to make sure my last note didn't get buried.
+
+The short version: I help ${nicheLabel} figure out which ad campaigns are actually driving closed business — not just leads. First month free to prove it.
+
+Worth a quick call?
+${process.env.CALENDLY || 'https://calendly.com/frogfishconsulting/discovery'}
+
+Jared
+Frogfish Consulting`;
+    const followUp3 = `${greeting}
+
+Last one from me — if the timing isn't right, totally understand.
+
+If you ever want to know how your firm shows up when someone asks ChatGPT or Google AI for help in your area, I'm happy to run that for free, no call needed.
+
+Just reply "audit" and I'll send it over.
+
+Jared
+Frogfish Consulting`;
+
     const leadRes = await fetch("https://api.instantly.ai/api/v2/leads/add", {
       method: "POST", headers,
-      body: JSON.stringify({ campaign_id: campaignId, leads: [{ email: to, personalization: body, custom_variables: { subject: String(subject) } }] })
+      body: JSON.stringify({
+        campaign_id: campaignId,
+        leads: [{
+          email: to,
+          personalization: body,
+          custom_variables: {
+            subject: String(subject),
+            follow_up_2: followUp2,
+            follow_up_3: followUp3
+          }
+        }]
+      })
     });
     const leadData = await leadRes.json();
     if (leadData.error) return res.json({ error: JSON.stringify(leadData.error) });
