@@ -227,6 +227,11 @@ function cleanBody(raw) {
     .replace(/\n+(best,?|regards,?|sincerely,?|cheers,?|thanks,?|warm regards,?)\s*\n[\s\S]*$/i, '')
     .replace(/\[your\s*name\]/gi, '')
     .replace(/\[name\]/gi, '')
+    .replace(/\n*worth a (conversation|call|chat|quick call)[?.]*\s*$/i, '')
+    .replace(/\n*let me know if[^\n]*$/i, '')
+    .replace(/\n*would (you be|it be)[^\n]*\?\s*$/i, '')
+    .replace(/\n*open to[^\n]*\?\s*$/i, '')
+    .replace(/\n*happy to[^\n]*\?\s*$/i, '')
     .replace(/^\n+/, '')
     .replace(/\n+$/, '')
     .trim();
@@ -330,32 +335,77 @@ function applyDailyLimits(leads) {
   return result;
 }
 
-function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName) {
+function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName, aeoResult) {
   var cs = niche==='legal'
     ? 'A firm in a similar position restructured campaigns around CRM closed case data. Cost per signed case dropped 42% in 4 months.'
     : niche==='home'
     ? 'A similar company found one campaign eating 30% of budget with zero closed jobs. Cut it - revenue per marketing dollar nearly doubled.'
     : 'A comparable business connected their CRM to their campaigns and grew revenue 28% without touching their ad spend.';
 
-  var googleCred = 'Before Frogfish, our team spent 10 years at Google running lead gen in this exact space. We know how the algorithm thinks - and it is not optimizing for your bottom line.';
-  var context = websiteContext && websiteContext.length > 50 ? 'COMPANY RESEARCH (use to make opening hyper-specific, DO NOT summarize - use it to identify the exact version of the problem they face): ' + websiteContext.slice(0, 600) + ' ' : '';
-  var offer = 'First month free. No contract. We connect your data, show you exactly where spend is leaking, and prove bottom line impact. If we cannot, you owe nothing.';
-  var rules = 'COLD EMAIL RULES: Under 120 words. 3 short paragraphs. Casual peer-to-peer tone. No exclamation marks. No corporate speak. No "I hope this finds you well". No "I wanted to reach out". Pattern interrupt opening. ONE clear ask at the end. OUTPUT BODY PARAGRAPHS ONLY - no greeting, no signature, no subject line, no Calendly link.';
+  var context = websiteContext && websiteContext.length > 50
+    ? 'COMPANY RESEARCH: ' + websiteContext.slice(0, 400) + ' '
+    : '';
 
+  var offer = 'First month free. No contract. If we cannot show bottom line impact, you owe nothing.';
+  var city = location && location.indexOf(',') > 0 ? location.split(',')[0].trim() : location || 'your area';
+  var nicheLabel = niche==='legal' ? 'personal injury attorney' : niche==='home' ? 'home services company' : 'financial advisor';
+
+  var rules = 'RULES: Under 100 words total. Plain conversational tone - like a smart peer, not a vendor. No exclamation marks. No corporate speak. No "I hope this finds you well". No "I wanted to reach out". No closing question or call to action - that is added separately. OUTPUT 2-3 SHORT PARAGRAPHS ONLY - no greeting, no signature, no subject line.';
+
+  // VARIANT A - AEO Hook
+  if(variant === 'A') {
+    var aeoNote = aeoResult
+      ? 'AEO FINDING TO USE: ' + aeoResult + '. Reference this specific finding naturally in the first line. '
+      : 'Open by mentioning you searched for ' + nicheLabel + ' in ' + city + ' using ChatGPT and Google AI overview - reference what you found about their visibility (or lack of it). ';
+    return context + aeoNote
+      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT A - AEO HOOK: '
+      + 'Para 1: The specific AI search finding about their firm. Make it feel like you actually checked - because we did. '
+      + 'Para 2: One sentence - Jared runs Frogfish, helps firms like theirs close the gap between digital ad spend and actual signed cases/closed clients. '
+      + 'Para 3: ' + offer + ' Free AI visibility report on the call. '
+      + rules;
+  }
+
+  // VARIANT B - Straight shooter
   if(variant === 'B') {
-    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT B - ULTRA SHORT WARM INTRO: Para 1: Open with "I tried reaching your team directly but wanted to make sure this got to the right person." Then one sharp sentence about their specific pain: ' + pain + '. Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
+    return context
+      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT B - STRAIGHT SHOOTER: '
+      + 'Para 1: Open with a direct question - do they know which campaigns are driving clients that actually sign, not just leads that fill out a form? One sharp sentence on why most firms in their space do not know: ' + pain + '. '
+      + 'Para 2: ' + cs + ' '
+      + 'Para 3: ' + offer + ' '
+      + rules;
   }
 
+  // VARIANT C - Honest AI outreach
   if(variant === 'C') {
-    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT C - LEAD WITH ROI NUMBER: Para 1: Open with a bold specific stat like "Most businesses in your space have 20-40% of their ad budget going to lead types that never convert - the platform has no idea which ones close." Then: ' + googleCred + ' Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
+    return context
+      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT C - HONEST AI TRANSPARENCY: '
+      + 'Para 1: Open with full transparency - Jared built an AI system that found their firm and helped write this email. But the reason it flagged them is real: ' + pain + '. '
+      + 'Para 2: One sentence - Jared would love to show them what he built and how it could work for their marketing too. He can also share a free AI visibility report showing how their firm appears in ChatGPT and Google AI. '
+      + 'Para 3: Keep it light - just asking if they have 15 minutes. '
+      + rules;
   }
 
+  // VARIANT D - Peer to peer / value add
   if(variant === 'D') {
-    return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT D - INTERNAL REFERRAL: Para 1: Open with exactly: "I spoke with ' + staffName + ' at your office last week - she suggested I reach out to you directly about your digital marketing." Then one sharp sentence on their pain: ' + pain + '. Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
+    var refLine = staffName
+      ? 'Para 1: Open with: "I spoke with ' + staffName + ' at your office last week - she suggested I reach out to you directly." Then one line on what Jared does. '
+      : 'Para 1: Open peer-to-peer - Jared has been building AI tools for firms in their space, specifically around connecting ad spend to actual revenue not just lead volume. ';
+    return context
+      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT D - PEER TO PEER: '
+      + refLine
+      + 'Para 2: ' + cs + ' Offer to share what they built and run a free AI visibility check on their firm. '
+      + 'Para 3: Light ask - 15 minutes? '
+      + rules;
   }
 
-  return context + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). VARIANT A - RESEARCH-BASED PATTERN INTERRUPT: Para 1: Use the research above to write ONE sharp observation about ' + company + ' that connects directly to this pain: ' + pain + '. Make them think "how did they know that?" - not a summary of their website, but an insight about their specific situation. Weave in naturally: ' + googleCred + ' Para 2: ' + cs + ' Para 3: ' + offer + ' ' + rules;
+  // Fallback to A
+  return context + 'Write a short cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + '. ' + offer + ' ' + rules;
 }
+
 
 function extractStaffName(websiteText) {
   var juniorKeywords = ['coordinator', 'assistant', 'associate', 'specialist', 'paralegal', 'administrator', 'receptionist', 'office manager', 'analyst', 'consultant', 'representative', 'advisor'];
@@ -391,6 +441,19 @@ function extractStaffName(websiteText) {
   return null;
 }
 
+async function checkAEO(company, niche, location) {
+  // Query Claude to simulate what ChatGPT/AI would say about this company
+  var city = location && location.indexOf(',') > 0 ? location.split(',')[0].trim() : location || '';
+  var nicheLabel = niche==='legal' ? 'personal injury attorney' : niche==='home' ? 'home services company' : 'financial advisor';
+  var query = 'When someone asks an AI assistant like ChatGPT for the best ' + nicheLabel + (city ? ' in ' + city : '') + ', would "' + company + '" appear in the results? Based on typical AI training data and web presence signals, give a 1-2 sentence honest assessment of their AI search visibility. Be specific and direct.';
+  try {
+    var result = await callAI(query);
+    return result ? result.slice(0, 300) : null;
+  } catch(e) {
+    return null;
+  }
+}
+
 async function researchCompany(domain) {
   if(!domain || domain === 'unknown.com') return '';
   try {
@@ -421,35 +484,41 @@ async function generateEmails(leads) {
       var staffName = websiteText ? extractStaffName(websiteText) : null;
       var availableVariants = staffName ? ['A','B','C','D'] : ['A','B','C'];
       var variant = availableVariants[Math.floor(Math.random()*availableVariants.length)];
-      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant, staffName);
+      // Run AEO check for Variant A
+      var aeoResult = null;
+      if(variant === 'A') {
+        log('Running AI visibility check for '+l.company+'...','info');
+        aeoResult = await checkAEO(l.company, l.niche, l.location);
+      }
+      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant, staffName, aeoResult);
       var rawBody = await callAI(prompt);
       var cleanedBody = cleanBody(rawBody);
       // Multiple subject options per variant - randomly pick one
       var subjectPool = {
         A: [
-          'Quick question - '+l.company,
-          l.company+' and your cost per closed deal',
-          'What your CRM data is telling you (that your ad platform isn\'t)',
-          'The gap between your leads and your revenue',
-          l.company+' - something I noticed'
+          'How '+l.company+' shows up in AI search',
+          l.company+' in ChatGPT',
+          'AI visibility - '+l.company,
+          'Quick finding on '+l.company,
+          'What AI says about '+l.company
         ],
         B: [
-          l.company+' - quick thought',
-          'Wanted to make sure this got to you',
-          'Tried your website first',
-          l.company+' - 2 minutes of your time'
+          'Quick question about your ad spend',
+          l.company+' - quick question',
+          'Which campaigns are actually closing cases',
+          'Your ad spend and your closed cases'
         ],
         C: [
-          'Your ad spend and your closed cases',
-          '20-40% of your budget might be wasted',
-          'What Google isn\'t telling you about your leads',
-          'The ROI your campaigns are hiding'
+          'Honest cold email from an AI-powered agency',
+          'Full transparency - '+l.company,
+          'Built an AI system that found you',
+          'AI found your firm - here\'s why'
         ],
         D: [
-          'Following up - '+l.company,
-          'Per my conversation with your team',
-          'Quick follow up from last week',
-          'Referred your way'
+          l.company+' and AI',
+          'AI tools for firms like yours',
+          'Built something you might find useful',
+          'Quick thought on '+l.company
         ]
       };
       var pool = subjectPool[variant] || subjectPool['A'];
@@ -554,7 +623,10 @@ async function approveEmail(id) {
         instantlyKey: S.keys.instantly,
         to: item.email,
         subject: subject,
-        body: emailBody
+        body: emailBody,
+        firstName: item.firstName,
+        company: item.company,
+        niche: item.niche
       })
     });
     var result = await r.json();
@@ -682,7 +754,7 @@ function pageDash() {
       var openRate = vs.sent>0?Math.round((vs.opened/vs.sent)*100):0;
       var replyRate = vs.sent>0?Math.round((vs.replied/vs.sent)*100):0;
       var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd'};
-      var labels = {A:'Research',B:'Warm Intro',C:'ROI Lead',D:'Referral'};
+      var labels = {A:'AEO Hook',B:'Straight Shot',C:'AI Honest',D:'Peer'};
       return '<div style="background:#060c08;border:1px solid '+(colors[v]||'#1a3320')+';padding:12px;border-radius:2px">'
         +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+(colors[v]||'#4ade80')+'">'+v+'</div>'
         +'<div style="font-size:9px;color:#4a7a58;margin-bottom:8px">'+labels[v]+'</div>'
