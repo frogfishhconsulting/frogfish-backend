@@ -88,9 +88,9 @@ input:focus{border-color:#4ade80}
 var CALENDLY = 'https://calendly.com/frogfishconsulting/discovery';
 
 var NICHES = [
-  {id:'legal', label:'Law Firms', industries:['legal services'], titles:['Managing Partner','Partner','Marketing Director','CMO','Business Development Manager'], pain:'optimizing campaigns for form fills instead of signed cases'},
-  {id:'home', label:'Home Services', industries:['consumer services','construction'], titles:['Owner','CEO','Marketing Manager','Director of Marketing','VP of Marketing'], pain:'running ads but no visibility into which campaigns drive actual closed jobs'},
-  {id:'financial', label:'Financial/Insurance', industries:['financial services','insurance'], titles:['CMO','VP of Marketing','Director of Digital Marketing','Head of Growth','Marketing Manager'], pain:'high cost per lead with no visibility into which leads actually convert to clients'}
+  {id:'legal', label:'Law Firms', industries:['legal services'], titles:['Managing Partner','Partner','CEO','President','Business Development Director','Director of Business Development'], pain:'spending on digital ads without knowing which campaigns drive signed cases vs wasted intake calls'},
+  {id:'home', label:'Home Services', industries:['consumer services','construction'], titles:['Owner','CEO','President','Co-Founder','General Manager','VP of Sales'], pain:'running ads with no visibility into which campaigns drive actual closed jobs vs tire-kickers'},
+  {id:'financial', label:'Financial/Insurance', industries:['financial services','insurance'], titles:['CEO','President','Owner','Managing Director','VP of Sales','Head of Business Development','Partner'], pain:'high cost per lead with no way to know which leads actually convert to paying clients'}
 ];
 
 var MOCK = [
@@ -337,73 +337,67 @@ function applyDailyLimits(leads) {
 
 function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName, aeoResult) {
   var cs = niche==='legal'
-    ? 'A firm in a similar position restructured campaigns around CRM closed case data. Cost per signed case dropped 42% in 4 months.'
+    ? 'A firm in a similar position restructured campaigns around CRM closed case data. Cost per signed case dropped 42% in four months.'
     : niche==='home'
     ? 'A similar company found one campaign eating 30% of budget with zero closed jobs. Cut it - revenue per marketing dollar nearly doubled.'
     : 'A comparable business connected their CRM to their campaigns and grew revenue 28% without touching their ad spend.';
 
   var context = websiteContext && websiteContext.length > 50
-    ? 'COMPANY RESEARCH: ' + websiteContext.slice(0, 400) + ' '
+    ? 'COMPANY RESEARCH (use only if it helps make the email more specific): ' + websiteContext.slice(0, 300) + ' '
     : '';
 
   var offer = 'First month free. No contract. If we cannot show bottom line impact, you owe nothing.';
   var city = location && location.indexOf(',') > 0 ? location.split(',')[0].trim() : location || 'your area';
   var nicheLabel = niche==='legal' ? 'personal injury attorney' : niche==='home' ? 'home services company' : 'financial advisor';
+  var cred = 'ex-Google team — spent a decade building lead gen and AI systems at Google';
+  var role = 'Jared runs business development at Frogfish';
 
-  var rules = 'RULES: Under 100 words total. Plain conversational tone - like a smart peer, not a vendor. No exclamation marks. No corporate speak. No "I hope this finds you well". No "I wanted to reach out". No closing question or call to action - that is added separately. OUTPUT 2-3 SHORT PARAGRAPHS ONLY - no greeting, no signature, no subject line.';
+  var rules = 'RULES: Under 90 words. Short punchy paragraphs - 2 to 3 sentences each. Completely plain conversational tone - like a real person texting a peer, not a sales email. No exclamation marks. No "I hope", no "I wanted to reach out", no corporate speak. No closing question or CTA - added separately. Feel free to be direct and even blunt. OUTPUT PARAGRAPHS ONLY - no greeting, no signature, no subject line, no labels.';
 
-  // VARIANT A - AEO Hook
+  // VARIANT A - AEO visibility hook
   if(variant === 'A') {
-    var aeoNote = aeoResult
-      ? 'AEO FINDING TO USE: ' + aeoResult + '. Reference this specific finding naturally in the first line. '
-      : 'Open by mentioning you searched for ' + nicheLabel + ' in ' + city + ' using ChatGPT and Google AI overview - reference what you found about their visibility (or lack of it). ';
-    return context + aeoNote
-      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT A - AEO HOOK: '
-      + 'Para 1: The specific AI search finding about their firm. Make it feel like you actually checked - because we did. '
-      + 'Para 2: One sentence - Jared runs Frogfish, helps firms like theirs close the gap between digital ad spend and actual signed cases/closed clients. '
-      + 'Para 3: ' + offer + ' Free AI visibility report on the call. '
+    var aeoLine = aeoResult
+      ? 'Use this specific finding naturally in the first sentence: ' + aeoResult
+      : 'Open with the fact that you looked up ' + company + ' in ChatGPT searching the way their clients do - and they do not show up prominently.';
+    return context + aeoLine + ' Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'Para 1: The specific AI search finding. Blunt and specific - not generic. '
+      + 'Para 2: One sentence on who Frogfish is: ' + cred + '. One sentence on what they do: help ' + (niche==='legal'?'law firms':'companies like this') + ' connect ad spend to revenue that actually closes, not just lead volume. '
+      + 'Para 3: ' + offer + ' Happy to share what we found. '
       + rules;
   }
 
-  // VARIANT B - Straight shooter
+  // VARIANT B - Straight shot, no fluff
   if(variant === 'B') {
-    return context
-      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT B - STRAIGHT SHOOTER: '
-      + 'Para 1: Open with a direct question - do they know which campaigns are driving clients that actually sign, not just leads that fill out a form? One sharp sentence on why most firms in their space do not know: ' + pain + '. '
-      + 'Para 2: ' + cs + ' '
+    return context + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT B - BLUNT AND SHORT: '
+      + 'Para 1: Cut straight to it - Frogfish helps ' + (niche==='legal'?'law firms':'companies like theirs') + ' figure out which ad campaigns are driving real closed business and which ones are burning budget on leads that never convert. No buildup, no question - just state it directly. '
+      + 'Para 2: ' + cred + '. We know exactly how the platform thinks. ' + cs + ' '
       + 'Para 3: ' + offer + ' '
       + rules;
   }
 
-  // VARIANT C - Honest AI outreach
+  // VARIANT C - Honest AI + Zeitgeist tool pitch
   if(variant === 'C') {
-    return context
-      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT C - HONEST AI TRANSPARENCY: '
-      + 'Para 1: Open with full transparency - Jared built an AI system that found their firm and helped write this email. But the reason it flagged them is real: ' + pain + '. '
-      + 'Para 2: One sentence - Jared would love to show them what he built and how it could work for their marketing too. He can also share a free AI visibility report showing how their firm appears in ChatGPT and Google AI. '
-      + 'Para 3: Keep it light - just asking if they have 15 minutes. '
+    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT C - HONEST AI OUTREACH WITH TOOL EXAMPLE: '
+      + 'Para 1: Open with full transparency - this email was built by an AI outreach tool Jared created for Frogfish. State it plainly and confidently, no apology. '
+      + 'Para 2: Frogfish is a digital marketing and AI tooling agency. Give one concrete example of what we have built: a tool called Zeitgeist - it scrapes real-time sentiment from Reddit, X, and other platforms and automates creative execution so ad creatives stay fresh and relevant without manual work. Frame it as something we want to bring to them. '
+      + 'Para 3: Ask if they have time to meet - happy to buy lunch, show what we have built, and see if there is any fit. No pitch, just a real conversation. '
       + rules;
   }
 
-  // VARIANT D - Peer to peer / value add
+  // VARIANT D - Lunch offer
   if(variant === 'D') {
-    var refLine = staffName
-      ? 'Para 1: Open with: "I spoke with ' + staffName + ' at your office last week - she suggested I reach out to you directly." Then one line on what Jared does. '
-      : 'Para 1: Open peer-to-peer - Jared has been building AI tools for firms in their space, specifically around connecting ad spend to actual revenue not just lead volume. ';
-    return context
-      + 'Write a cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT D - PEER TO PEER: '
-      + refLine
-      + 'Para 2: ' + cs + ' Offer to share what they built and run a free AI visibility check on their firm. '
-      + 'Para 3: Light ask - 15 minutes? '
+    return context + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT D - LUNCH OFFER: '
+      + 'Para 1: Open by saying Jared wanted to follow up on getting lunch on the calendar for their team. Keep it casual and natural like a real follow-up, not a sales pitch. '
+      + 'Para 2: One or two sentences - Frogfish is ' + cred + '. We help ' + (niche==='legal'?'law firms':'companies like theirs') + ' figure out which ad spend is driving actual revenue vs wasted leads. ' + cs + ' '
+      + 'Para 3: Offer to buy lunch for the team, show what we built, and run a free AI visibility audit on their firm. No pitch - just useful. '
       + rules;
   }
 
-  // Fallback to A
-  return context + 'Write a short cold email body for Jared at Frogfish Consulting to ' + title + ' at ' + company + '. ' + offer + ' ' + rules;
+  // Fallback
+  return context + 'Write a short cold email body for ' + role + ' to ' + title + ' at ' + company + '. ' + offer + ' ' + cred + '. ' + rules;
 }
 
 
@@ -499,26 +493,25 @@ async function generateEmails(leads) {
           'How '+l.company+' shows up in AI search',
           l.company+' in ChatGPT',
           'AI visibility - '+l.company,
-          'Quick finding on '+l.company,
-          'What AI says about '+l.company
+          'Quick finding on '+l.company
         ],
         B: [
-          'Quick question about your ad spend',
-          l.company+' - quick question',
-          'Which campaigns are actually closing cases',
-          'Your ad spend and your closed cases'
+          'quick note - Frogfish',
+          l.company+' - 2 minutes',
+          'something we noticed',
+          l.company+' and your pipeline'
         ],
         C: [
-          'Honest cold email from an AI-powered agency',
-          'Full transparency - '+l.company,
-          'Built an AI system that found you',
-          'AI found your firm - here\'s why'
+          'honest outreach',
+          'full transparency',
+          'straight up cold email',
+          'being upfront - '+l.company
         ],
         D: [
-          l.company+' and AI',
-          'AI tools for firms like yours',
-          'Built something you might find useful',
-          'Quick thought on '+l.company
+          'Following up on lunch',
+          'lunch for the team',
+          'getting lunch on the calendar',
+          'lunch on us - '+l.company
         ]
       };
       var pool = subjectPool[variant] || subjectPool['A'];
