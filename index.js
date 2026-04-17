@@ -341,5 +341,80 @@ app.get("/webhook/events", (req, res) => {
   res.json(global.webhookEvents || []);
 });
 
+// Backend scheduler - runs autonomous scan at set time
+let schedulerInterval = null;
+let schedulerConfig = { enabled: false, time: '08:00', lastRun: null };
+
+// Save/load scheduler config from DB
+async function saveSchedulerConfig() {
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      ['scheduler_config', JSON.stringify(schedulerConfig)]
+    );
+  } catch(e) { console.error("Scheduler save error:", e.message); }
+}
+
+async function loadSchedulerConfig() {
+  if (!pool) return;
+  try {
+    const result = await pool.query("SELECT value FROM settings WHERE key = 'scheduler_config'");
+    if (result.rows.length > 0) {
+      schedulerConfig = JSON.parse(result.rows[0].value);
+      if (schedulerConfig.enabled) startScheduler();
+      console.log("Scheduler config loaded:", schedulerConfig);
+    }
+  } catch(e) { console.error("Scheduler load error:", e.message); }
+}
+
+function startScheduler() {
+  if (schedulerInterval) clearInterval(schedulerInterval);
+  schedulerInterval = setInterval(async () => {
+    if (!schedulerConfig.enabled) return;
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    const today = now.toDateString();
+    const dayOfWeek = now.getDay(); // 0=Sun, 6=Sat
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const endDate = schedulerConfig.endDate ? new Date(schedulerConfig.endDate) : null;
+    const pastEndDate = endDate && now > endDate;
+    if (timeStr === schedulerConfig.time && schedulerConfig.lastRun !== today && isWeekday && !pastEndDate) {
+      console.log("Scheduler firing at", timeStr);
+      schedulerConfig.lastRun = today;
+      await saveSchedulerConfig();
+      global.schedulerTriggered = { time: new Date().toISOString() };
+    } else if (pastEndDate && schedulerConfig.enabled) {
+      console.log("Scheduler end date reached - pausing autonomous mode");
+      schedulerConfig.enabled = false;
+      await saveSchedulerConfig();
+      if (schedulerInterval) { clearInterval(schedulerInterval); schedulerInterval = null; }
+    }
+  }, 60000);
+  console.log("Scheduler started, will fire daily at", schedulerConfig.time);
+}
+
+// Scheduler API endpoints
+app.post("/scheduler/config", async (req, res) => {
+  const { enabled, time } = req.body;
+  schedulerConfig.enabled = enabled;
+  if (time) schedulerConfig.time = time;
+  if (req.body.endDate) schedulerConfig.endDate = req.body.endDate;
+  if (enabled) startScheduler();
+  else if (schedulerInterval) { clearInterval(schedulerInterval); schedulerInterval = null; }
+  await saveSchedulerConfig();
+  res.json({ saved: true, config: schedulerConfig });
+});
+
+app.get("/scheduler/status", (req, res) => {
+  const triggered = global.schedulerTriggered;
+  if (triggered) global.schedulerTriggered = null; // consume it
+  res.json({ config: schedulerConfig, triggered });
+});
+
+// Load scheduler on startup
+loadSchedulerConfig();
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Frogfish BD Agent running on port ${PORT}`));
