@@ -111,7 +111,7 @@ var S = {
   sent: 0, booked: 0,
   seenEmails: [],      // ALL emails ever pulled - permanent dedup list
   sentLog: [],         // full log of every sent email with who/when/variant
-  variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0}},
+  variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0},E:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
   dailyLimit: 50, maxPerCompany: 1,
@@ -134,6 +134,8 @@ var S = {
     var sl2 = localStorage.getItem('ff_sentlog'); if(sl2) S.sentLog = JSON.parse(sl2);
     var sp = localStorage.getItem('ff_page'); if(sp) S.apolloPage = JSON.parse(sp);
     var sr = localStorage.getItem('ff_replies'); if(sr) S.replies = JSON.parse(sr);
+    var saa = localStorage.getItem('ff_autoapprove'); if(saa) S.autoApprove = JSON.parse(saa);
+    var sat = localStorage.getItem('ff_schedtime'); if(sat) S.scheduledTime = sat;
   } catch(e) { console.log('Restore error:', e); }
 })();
 
@@ -175,6 +177,8 @@ function set(p){
     localStorage.setItem('ff_sentlog', JSON.stringify(S.sentLog.slice(0,1000)));
     localStorage.setItem('ff_page', JSON.stringify(S.apolloPage));
     localStorage.setItem('ff_replies', JSON.stringify(S.replies.slice(0,200)));
+    localStorage.setItem('ff_autoapprove', JSON.stringify(S.autoApprove));
+    localStorage.setItem('ff_schedtime', S.scheduledTime);
   } catch(e) {}
   // Login gate
 var LOGIN_USER = 'jared';
@@ -346,7 +350,8 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
     ? 'COMPANY RESEARCH (use only if it helps make the email more specific): ' + websiteContext.slice(0, 300) + ' '
     : '';
 
-  var offer = 'First month free. No contract. If we cannot show bottom line impact, you owe nothing.';
+  var offer = 'We will run a free diagnostic on your current setup — no tools to buy, no commitment. Just show you where the gaps are. If it is useful, we talk next steps.';
+  var positioning = 'Frogfish is a consulting firm focused on three things: media strategy and execution, data analytics to evaluate where revenue is actually coming from, and AI tooling to turn those insights into real business value.';
   var city = location && location.indexOf(',') > 0 ? location.split(',')[0].trim() : location || 'your area';
   var nicheLabel = niche==='legal' ? 'personal injury attorney' : niche==='home' ? 'home services company' : 'financial advisor';
   var cred = 'ex-Google team — spent a decade building lead gen and AI systems at Google';
@@ -362,7 +367,7 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
     return context + aeoLine + ' Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
       + 'Para 1: The specific AI search finding. Blunt and specific - not generic. '
       + 'Para 2: One sentence on who Frogfish is: ' + cred + '. One sentence on what they do: help ' + (niche==='legal'?'law firms':'companies like this') + ' connect ad spend to revenue that actually closes, not just lead volume. '
-      + 'Para 3: ' + offer + ' Happy to share what we found. '
+      + 'Para 3: ' + offer + ' '
       + rules;
   }
 
@@ -371,18 +376,18 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
     return context + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
       + 'VARIANT B - BLUNT AND SHORT: '
       + 'Para 1: Cut straight to it - Frogfish helps ' + (niche==='legal'?'law firms':'companies like theirs') + ' figure out which ad campaigns are driving real closed business and which ones are burning budget on leads that never convert. No buildup, no question - just state it directly. '
-      + 'Para 2: ' + cred + '. We know exactly how the platform thinks. ' + cs + ' '
+      + 'Para 2: ' + positioning + ' ' + cred + '. ' + cs + ' '
       + 'Para 3: ' + offer + ' '
       + rules;
   }
 
-  // VARIANT C - Honest AI + Zeitgeist tool pitch
+  // VARIANT C - Casual honest AI outreach
   if(variant === 'C') {
     return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT C - HONEST AI OUTREACH WITH TOOL EXAMPLE: '
-      + 'Para 1: Open with full transparency - this email was built by an AI outreach tool Jared created for Frogfish. State it plainly and confidently, no apology. '
-      + 'Para 2: Frogfish is a digital marketing and AI tooling agency. Give one concrete example of what we have built: a tool called Zeitgeist - it scrapes real-time sentiment from Reddit, X, and other platforms and automates creative execution so ad creatives stay fresh and relevant without manual work. Frame it as something we want to bring to them. '
-      + 'Para 3: Ask if they have time to meet - happy to buy lunch, show what we have built, and see if there is any fit. No pitch, just a real conversation. '
+      + 'VARIANT C - CASUAL HONEST OPENER: '
+      + 'Para 1: Open casually and directly - "Won\'t beat around the bush" - we built an AI product that does customized outbound for us, and it found them. Short, natural, like a real person talking. '
+      + 'Para 2: Frogfish is a digital marketing and AI tooling agency. One thing we have built is a tool called Zeitgeist - it pulls real-time sentiment from Reddit and X and automates ad creative execution so creatives stay current without the manual work. We want to bring it to firms like theirs. Keep it conversational, one or two sentences. '
+      + 'Para 3: Happy to buy lunch and show what we have got. No pitch - just a real conversation to see if there is any fit. '
       + rules;
   }
 
@@ -391,8 +396,18 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
     return context + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
       + 'VARIANT D - LUNCH OFFER: '
       + 'Para 1: Open by saying Jared wanted to follow up on getting lunch on the calendar for their team. Keep it casual and natural like a real follow-up, not a sales pitch. '
-      + 'Para 2: One or two sentences - Frogfish is ' + cred + '. We help ' + (niche==='legal'?'law firms':'companies like theirs') + ' figure out which ad spend is driving actual revenue vs wasted leads. ' + cs + ' '
-      + 'Para 3: Offer to buy lunch for the team, show what we built, and run a free AI visibility audit on their firm. No pitch - just useful. '
+      + 'Para 2: ' + positioning + ' ' + cred + '. ' + cs + ' '
+      + 'Para 3: Offer to buy lunch for the team, show what Frogfish has built, and run a free diagnostic on their current setup. No pitch - just useful. '
+      + rules;
+  }
+
+  // VARIANT E - Just ask
+  if(variant === 'E') {
+    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT E - DIRECT AND DISARMING: '
+      + 'Para 1: Open by simply asking if they would be open to a lunch or a quick 1:1. Say you are trying to cut through the noise and figured natural straightforward outreach might actually resonate more than the usual stuff. Keep it genuine and human - one or two sentences max. '
+      + 'Para 2: One sentence intro - Frogfish, ' + cred + '. We work with firms on media strategy, data analytics, and AI tooling. '
+      + 'Para 3: Just one line - That is it. Would you be open to it? Keep it that simple. '
       + rules;
   }
 
@@ -476,7 +491,7 @@ async function generateEmails(leads) {
       }
       var greeting = l.firstName ? 'Hi '+l.firstName+',' : 'Hi,';
       var staffName = websiteText ? extractStaffName(websiteText) : null;
-      var availableVariants = staffName ? ['A','B','C','D'] : ['A','B','C'];
+      var availableVariants = staffName ? ['A','B','C','D','E'] : ['A','B','C','E'];
       var variant = availableVariants[Math.floor(Math.random()*availableVariants.length)];
       // Run AEO check for Variant A
       var aeoResult = null;
@@ -512,11 +527,17 @@ async function generateEmails(leads) {
           'lunch for the team',
           'getting lunch on the calendar',
           'lunch on us - '+l.company
+        ],
+        E: [
+          'lunch or a quick chat?',
+          'worth a 1:1?',
+          'quick ask - '+l.company,
+          'cutting through the noise'
         ]
       };
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = pool[Math.floor(Math.random()*pool.length)];
-      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a quick call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nCalendar link below if you\'re open to it:\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -540,8 +561,18 @@ async function generateEmails(leads) {
     }
     await new Promise(function(r){ setTimeout(r,400); });
   }
-  set({scanning:false, scanProg:0, tab:'review'});
-  log('All done - review queue ready. Nothing sent yet.','meeting');
+  set({scanning:false, scanProg:0, tab: S.autoApprove ? 'dashboard' : 'review'});
+  if(S.autoApprove) {
+    log('Auto-approve ON - sending all emails now...','success');
+    var pending = S.reviewQueue.filter(function(x){ return x.status==='pending'; });
+    for(var i=0; i<pending.length; i++) {
+      await approveEmail(pending[i].id);
+      await new Promise(function(r){ setTimeout(r, 800); });
+    }
+    log('All '+pending.length+' emails sent automatically.','meeting');
+  } else {
+    log('All done - review queue ready. Nothing sent yet.','meeting');
+  }
   saveStateToServer();
 }
 
@@ -560,7 +591,7 @@ async function genSingle(lead) {
     var prompt = makePrompt(lead.company, lead.title, lead.location, n.pain, lead.niche, websiteText2);
     var rawBody = await callAI(prompt);
     var cleanedBody = cleanBody(rawBody);
-    var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nWorth a quick call?\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+    var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nCalendar link below if you\'re open to it:\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
     var item = {
       id: 'rq_'+lead.id+'_'+Date.now(),
       leadId: lead.id,
@@ -730,7 +761,23 @@ function pageDash() {
   var logHtml = S.log.map(function(e){
     return '<div class="log-entry" style="border-color:'+LC[e.c]+';background:'+LC[e.c]+'15"><span style="color:#2d5c3a;margin-right:10px">'+e.t+'</span><span style="color:'+LC[e.c]+'">'+e.m+'</span></div>';
   }).join('');
-  var autoLabel = S.autoScan ? ' <span style="font-size:9px;color:#4ade80">AUTO</span>' : '';
+  var autoLabel = S.autoScan ? ' <span style="font-size:9px;color:#4ade80">'+(S.autoApprove?'● LIVE':'AUTO')+'</span>' : '';
+  var autonomousPanel = '<div style="background:#060c08;border:1px solid '+(S.autoApprove?'#4ade80':'#1a3320')+';border-radius:2px;padding:12px;margin-bottom:8px">'
+    +'<div class="flex-between mb-8">'
+    +'<div style="font-size:10px;color:#4ade80;letter-spacing:.1em">AUTONOMOUS MODE</div>'
+    +'<div style="display:flex;align-items:center;gap:6px">'
+    +'<span style="font-size:9px;color:#4a7a58">DAILY AT</span>'
+    +'<input type="time" value="'+S.scheduledTime+'" onchange="S.scheduledTime=this.value;set({})" style="background:#0a0f0d;border:1px solid #1a3320;color:#4ade80;font-family:DM Mono,monospace;font-size:10px;padding:3px 6px;border-radius:2px;width:80px">'
+    +'</div></div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+    +'<span style="font-size:9px;color:#4a7a58">ENDS</span>'
+    +'<input type="date" value="'+S.schedEndDate+'" onchange="S.schedEndDate=this.value;set({})" style="background:#0a0f0d;border:1px solid #1a3320;color:#4ade80;font-family:DM Mono,monospace;font-size:10px;padding:3px 6px;border-radius:2px">'
+    +'</div>'
+    +'<div style="font-size:10px;color:#4a7a58;margin-bottom:8px">Weekdays only. Pulls 50 leads + sends 50 emails per day.</div>'
+    +'<button style="width:100%;background:'+(S.autoApprove&&S.autoScan?'#0a2a10':'none')+';border:1px solid '+(S.autoApprove&&S.autoScan?'#4ade80':'#4a7a58')+';color:'+(S.autoApprove&&S.autoScan?'#4ade80':'#4a7a58')+';font-family:DM Mono,monospace;font-size:10px;padding:8px;cursor:pointer;border-radius:2px" onclick="toggleAutonomous()">'
+    +(S.autoApprove&&S.autoScan?'⏸ PAUSE AUTONOMOUS MODE':'▶ START AUTONOMOUS MODE')
+    +'</button>'
+    +'</div>';
   var scanBtn = S.scanning
     ? '<div style="font-size:11px;color:#fbbf24;margin-bottom:6px"><span class="pulse">&#9679;</span> Scanning... '+S.scanProg+'%</div><div class="progress-bar"><div class="progress-fill" style="width:'+S.scanProg+'%"></div></div>'
     : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Scan ('+S.dailyLimit+' companies)'+autoLabel+'</button><button class="btn mb-8" style="width:100%;text-align:left;background:'+(S.autoScan?'#0a2a10':'none')+';border-color:'+(S.autoScan?'#4ade80':'#4a7a58')+';color:'+(S.autoScan?'#4ade80':'#4a7a58')+'" onclick="toggleAutoScan()">'+(S.autoScan?'&#9646;&#9646; Pause Auto':'&#9654; Start Auto-Scan')+'</button>';
@@ -742,12 +789,12 @@ function pageDash() {
     +'<button class="btn" style="width:100%;text-align:left;background:none;border-color:#4a7a58;color:#4a7a58" onclick="go(\'leads\')">&#128203; Lead Queue ('+S.leads.length+')</button></div>'
     +'<div class="card mb-16"><div class="label" style="color:#4ade80;margin-bottom:12px">A/B Variant Performance</div>'
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
-    +['A','B','C','D'].map(function(v){
+    +['A','B','C','D','E'].map(function(v){
       var vs = (S.variantStats&&S.variantStats[v])||{sent:0,opened:0,replied:0};
       var openRate = vs.sent>0?Math.round((vs.opened/vs.sent)*100):0;
       var replyRate = vs.sent>0?Math.round((vs.replied/vs.sent)*100):0;
-      var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd'};
-      var labels = {A:'AEO Hook',B:'Straight Shot',C:'AI Honest',D:'Peer'};
+      var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd',E:'#fb923c'};
+      var labels = {A:'AEO Hook',B:'Straight Shot',C:'AI Honest',D:'Lunch',E:'Just Ask'};
       return '<div style="background:#060c08;border:1px solid '+(colors[v]||'#1a3320')+';padding:12px;border-radius:2px">'
         +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+(colors[v]||'#4ade80')+'">'+v+'</div>'
         +'<div style="font-size:9px;color:#4a7a58;margin-bottom:8px">'+labels[v]+'</div>'
@@ -1016,6 +1063,18 @@ async function doScan() {
 }
 
 
+function startScheduledScan() {
+  if(S.autoScanTimer) clearInterval(S.autoScanTimer);
+  S.autoScanTimer = setInterval(function(){
+    var now = new Date();
+    var timeStr = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    if(timeStr === S.scheduledTime && !S.scanning) {
+      log('Scheduled scan starting...','success');
+      doScan();
+    }
+  }, 60000); // check every minute
+}
+
 function toggleAutoScan() {
   if(S.autoScan) {
     S.autoScan = false;
@@ -1024,9 +1083,9 @@ function toggleAutoScan() {
     set({});
   } else {
     S.autoScan = true;
-    log('Auto-scan ON - scanning every 60 minutes','success');
-    doScan();
-    S.autoScanInterval = setInterval(function(){ if(!S.scanning) doScan(); }, 60*60*1000);
+    log('Auto-scan ON - will scan daily at '+S.scheduledTime,'success');
+    startScheduledScan();
+    doScan(); // run immediately first time
     set({});
   }
 }
@@ -1046,6 +1105,32 @@ window.singleGen = function(id){ var l=S.leads.filter(function(x){ return x.id==
 function clearSentLog(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} }
 
 window.toggleAutoScan = toggleAutoScan;
+window.toggleAutonomous = async function() {
+  if(S.autoApprove && S.autoScan) {
+    S.autoApprove = false;
+    S.autoScan = false;
+    if(S.autoScanInterval) { clearInterval(S.autoScanInterval); S.autoScanInterval = null; }
+    if(S.autoScanTimer) { clearInterval(S.autoScanTimer); S.autoScanTimer = null; }
+    // Disable backend scheduler
+    try {
+      await fetch('/scheduler/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:false,time:S.scheduledTime})});
+    } catch(e) {}
+    log('Autonomous mode paused','info');
+  } else {
+    S.autoApprove = true;
+    S.autoScan = true;
+    // Enable backend scheduler
+    try {
+      await fetch('/scheduler/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true,time:S.scheduledTime,endDate:S.schedEndDate})});
+      log('Autonomous mode ON - weekdays at '+S.scheduledTime+' through '+S.schedEndDate,'success');
+    } catch(e) {
+      log('Autonomous mode ON - browser-based scheduler running','success');
+      startScheduledScan();
+    }
+    if(confirm('Run first scan now?')) doScan();
+  }
+  set({});
+};
 window.connectGmail = async function() {
   if(!S.keys.googleClientId || !S.keys.googleClientSecret) {
     alert('Please add your Google Client ID and Client Secret in Settings first, then save keys.');
@@ -1111,6 +1196,21 @@ if(checkLogin()) {
 
 // Poll for Instantly webhook events every 30 seconds
 async function pollEvents() {
+  try {
+    // Check if backend scheduler triggered a scan
+    var schedRes = await fetch('/scheduler/status');
+    var schedData = await schedRes.json();
+    if(schedData.triggered && !S.scanning) {
+      log('Backend scheduler triggered - starting autonomous scan...','success');
+      doScan();
+    }
+    // Sync scheduler config
+    if(schedData.config && schedData.config.enabled !== S.autoScan) {
+      S.autoScan = schedData.config.enabled;
+      S.autoApprove = schedData.config.enabled;
+      if(schedData.config.time) S.scheduledTime = schedData.config.time;
+    }
+  } catch(e) {}
   try {
     // Check Gmail connection status
     var statusRes = await fetch('/gmail/status');
