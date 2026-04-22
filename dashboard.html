@@ -481,7 +481,11 @@ async function generateEmails(leads) {
           });
           searchAudit = await auditRes.json();
           if(searchAudit && !searchAudit.error) {
-            log((searchAudit.found ? '✓ ' : '✗ ') + l.company + (searchAudit.found ? ' found in search' : ' NOT found — competitors: ' + (searchAudit.topCompetitors||[]).join(', ')), 'info');
+            log((searchAudit.found ? '✓ ' : '✗ ') + l.company + (searchAudit.found ? ' found in search results' : ' NOT found — competitors: ' + (searchAudit.topCompetitors||[]).join(', ')), 'info');
+          } else if(searchAudit && searchAudit.error) {
+            log('Search audit error for '+l.company+': '+searchAudit.error,'error');
+          } else if(!S.keys.googleSearchKey || !S.keys.googleSearchCx) {
+            log('No Google Search keys set - skipping audit','info');
           }
         } catch(e) {}
       }
