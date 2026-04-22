@@ -256,6 +256,32 @@ app.post("/apollo/search", async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post("/search/audit", async (req, res) => {
+  const { searchKey, searchCx, company, niche, city } = req.body;
+  if (!searchKey || !searchCx) return res.json({ error: "Missing search credentials" });
+  try {
+    const nicheLabel = niche === 'legal' ? 'personal injury attorney' : niche === 'home' ? 'home services' : 'financial advisor';
+    const query = city ? `${nicheLabel} ${city}` : nicheLabel;
+    const url = `https://www.googleapis.com/customsearch/v1?key=${searchKey}&cx=${searchCx}&q=${encodeURIComponent(query)}&num=10`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (data.error) return res.json({ error: data.error.message });
+    const results = (data.items || []).map(item => item.title + ' - ' + item.displayLink);
+    const companyLower = company.toLowerCase();
+    const found = (data.items || []).some(item =>
+      item.title.toLowerCase().includes(companyLower) ||
+      item.displayLink.toLowerCase().includes(companyLower.replace(/\s+/g, ''))
+    );
+    const topCompetitors = (data.items || [])
+      .filter(item => !item.title.toLowerCase().includes(companyLower))
+      .slice(0, 3)
+      .map(item => item.title.split('|')[0].split('-')[0].trim());
+    res.json({ found, query, topCompetitors, totalResults: (data.items || []).length });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/research/company", async (req, res) => {
   const { domain } = req.body;
   if (!domain) return res.status(400).json({ error: "Missing domain" });
