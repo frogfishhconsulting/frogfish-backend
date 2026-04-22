@@ -114,7 +114,7 @@ var S = {
   variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
-  dailyLimit: 50, maxPerCompany: 1,
+  pullLimit: 5, maxPerCompany: 1,
   autoScan: false, autoScanInterval: null, apolloPage: 1, gmailConnected: false,
   log: [
     {t:'09:14 AM', m:'Agent ready - run a scan to get started', c:'info'}
@@ -222,7 +222,7 @@ if(checkLogin()) {
 function log(m,c){ if(!c)c='info'; var t=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); S.log=[{t:t,m:m,c:c}].concat(S.log).slice(0,60); }
 
 function buildEmail(greeting, bodyText, company) {
-  return greeting + '\n\n' + bodyText + '\n\nWorth a 20-min call?\n' + CALENDLY + '\n\nJared\nFrogfish Consulting';
+  return greeting + '\\n\\n' + bodyText + '\\n\\nJared\\nFrogfish Consulting';
 }
 
 function cleanBody(raw) {
@@ -325,7 +325,7 @@ function scoreP(p) {
   return Math.min(s, 99);
 }
 
-function applyDailyLimits(leads) {
+function applyPullLimits(leads) {
   var counts = {};
   var result = [];
   var companies = [];
@@ -333,7 +333,7 @@ function applyDailyLimits(leads) {
     var l = leads[i];
     var co = l.company.toLowerCase();
     if(!counts[co]) { counts[co]=0; companies.push(co); }
-    if(companies.filter(function(c){ return counts[c]>0||c===co; }).length > S.dailyLimit && counts[co]===0) continue;
+    if(companies.filter(function(c){ return counts[c]>0||c===co; }).length > S.pullLimit && counts[co]===0) continue;
     if(counts[co] < S.maxPerCompany) { counts[co]++; result.push(l); }
   }
   return result;
@@ -343,7 +343,7 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
   var positioning = 'one of three ex-Googlers who started Frogfish — we focus on lead gen businesses with complex online-to-offline conversion cycles: better measurement, true ROI, and custom AI tooling';
   var role = 'Jared runs business development at Frogfish';
 
-  var rules = 'RULES: Under 60 words total. Short punchy sentences. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No "I hope", no "I wanted to reach out", no "I am reaching out". No closing question or CTA — that is added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
+  var rules = 'RULES: Under 80 words total. Every sentence must be complete - never cut off mid-thought. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — those are added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
 
   // VARIANT A - Search audit hook if available, otherwise clean intro
   if(variant === 'A') {
@@ -516,7 +516,7 @@ async function generateEmails(leads) {
       };
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = pool[Math.floor(Math.random()*pool.length)];
-      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nCalendar link below if you\'re open to it:\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nJared\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -570,7 +570,7 @@ async function genSingle(lead) {
     var prompt = makePrompt(lead.company, lead.title, lead.location, n.pain, lead.niche, websiteText2);
     var rawBody = await callAI(prompt);
     var cleanedBody = cleanBody(rawBody);
-    var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nCalendar link below if you\'re open to it:\n'+CALENDLY+'\n\nJared\nFrogfish Consulting';
+    var fullEmail = 'Subject: Quick question - '+lead.company+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nJared\nFrogfish Consulting';
     var item = {
       id: 'rq_'+lead.id+'_'+Date.now(),
       leadId: lead.id,
@@ -759,7 +759,7 @@ function pageDash() {
     +'</div>';
   var scanBtn = S.scanning
     ? '<div style="font-size:11px;color:#fbbf24;margin-bottom:6px"><span class="pulse">&#9679;</span> Scanning... '+S.scanProg+'%</div><div class="progress-bar"><div class="progress-fill" style="width:'+S.scanProg+'%"></div></div>'
-    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Scan ('+S.dailyLimit+' companies)'+autoLabel+'</button><button class="btn mb-8" style="width:100%;text-align:left;background:'+(S.autoScan?'#0a2a10':'none')+';border-color:'+(S.autoScan?'#4ade80':'#4a7a58')+';color:'+(S.autoScan?'#4ade80':'#4a7a58')+'" onclick="toggleAutoScan()">'+(S.autoScan?'&#9646;&#9646; Pause Auto':'&#9654; Start Auto-Scan')+'</button>';
+    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Scan ('+S.pullLimit+' companies)'+autoLabel+'</button><button class="btn mb-8" style="width:100%;text-align:left;background:'+(S.autoScan?'#0a2a10':'none')+';border-color:'+(S.autoScan?'#4ade80':'#4a7a58')+';color:'+(S.autoScan?'#4ade80':'#4a7a58')+'" onclick="toggleAutoScan()">'+(S.autoScan?'&#9646;&#9646; Pause Auto':'&#9654; Start Auto-Scan')+'</button>';
   return err+alert+stats
     +'<div class="grid-12">'
     +'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Agent Log</div><span style="font-size:10px;color:'+(S.scanning?'#4ade80':'#2d5c3a')+'">'+(S.scanning?'SCANNING':'IDLE')+'</span></div><div class="log-scroll">'+logHtml+'</div></div>'
@@ -917,7 +917,7 @@ function pageSettings() {
   var ks = function(k){ return S.keys[k]?{l:'connected',c:'#4ade80'}:{l:'not set',c:'#f87171'}; };
   return '<div class="card mb-16"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Daily Send Settings</div></div>'
     +'<div class="grid-2 mb-12">'
-    +'<div><div class="label mb-4">Companies Per Day</div><input type="number" value="'+S.dailyLimit+'" min="1" max="50" oninput="S.dailyLimit=parseInt(this.value)||10"><div style="font-size:9px;color:#1a5c2e;margin-top:4px">Max unique companies to target daily</div></div>'
+    +'<div><div class="label mb-4">Companies Per Day</div><input type="number" value="'+S.pullLimit+'" min="1" max="50" oninput="S.pullLimit=parseInt(this.value)||10"><div style="font-size:9px;color:#1a5c2e;margin-top:4px">Max unique companies to target daily</div></div>'
     +'<div><div class="label mb-4">Max Contacts Per Company</div><input type="number" value="'+S.maxPerCompany+'" min="1" max="5" oninput="S.maxPerCompany=parseInt(this.value)||2"><div style="font-size:9px;color:#1a5c2e;margin-top:4px">Max emails per company per day</div></div>'
     +'</div></div>'
     +'<div class="card mb-16"><div class="flex-between mb-16"><div class="label" style="color:#4ade80">API Keys</div>'+(S.keySaved?'<span style="font-size:10px;color:#4ade80">Saved</span>':'')+'</div>'
@@ -979,7 +979,7 @@ function saveEdit(id) {
 async function doScan() {
   if(!S.keys.apollo){ log('Apollo API key not set - go to Settings','error'); set({}); return; }
   set({scanning:true, scanProg:0, lastError:null});
-  log('Starting scan - '+S.dailyLimit+' leads, 1 email each...','info');
+  log('Starting scan - '+S.pullLimit+' leads, 1 email each...','info');
   var all = [];
   for(var i=0;i<NICHES.length;i++) {
     var n = NICHES[i];
@@ -1022,7 +1022,7 @@ async function doScan() {
     await new Promise(function(r){ setTimeout(r,400); });
   }
   set({scanProg:100});
-  var limited = applyDailyLimits(all);
+  var limited = applyPullLimits(all);
   // Build comprehensive dedup set from leads + sentLog
   var existingEmails = new Set(
     S.leads.map(function(l){ return l.email; }).concat(
