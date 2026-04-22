@@ -111,7 +111,7 @@ var S = {
   sent: 0, booked: 0,
   seenEmails: [],      // ALL emails ever pulled - permanent dedup list
   sentLog: [],         // full log of every sent email with who/when/variant
-  variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0},D:{sent:0,opened:0,replied:0},E:{sent:0,opened:0,replied:0}},
+  variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
   dailyLimit: 50, maxPerCompany: 1,
@@ -339,80 +339,50 @@ function applyDailyLimits(leads) {
   return result;
 }
 
-function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName, aeoResult) {
-  var cs = niche==='legal'
-    ? 'A firm in a similar position restructured campaigns around CRM closed case data. Cost per signed case dropped 42% in four months.'
-    : niche==='home'
-    ? 'A similar company found one campaign eating 30% of budget with zero closed jobs. Cut it - revenue per marketing dollar nearly doubled.'
-    : 'A comparable business connected their CRM to their campaigns and grew revenue 28% without touching their ad spend.';
-
-  var context = websiteContext && websiteContext.length > 50
-    ? 'COMPANY RESEARCH (use only if it helps make the email more specific): ' + websiteContext.slice(0, 300) + ' '
-    : '';
-
-  var offer = 'We will run a free diagnostic on your current setup — no tools to buy, no commitment. Just show you where the gaps are. If it is useful, we talk next steps.';
-  var positioning = 'Frogfish is a consulting firm focused on three things: media strategy and execution, data analytics to evaluate where revenue is actually coming from, and AI tooling to turn those insights into real business value.';
-  var city = location && location.indexOf(',') > 0 ? location.split(',')[0].trim() : location || 'your area';
-  var nicheLabel = niche==='legal' ? 'personal injury attorney' : niche==='home' ? 'home services company' : 'financial advisor';
-  var cred = 'ex-Google team — spent a decade building lead gen and AI systems at Google';
+function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName, aeoResult, searchAudit) {
+  var positioning = 'one of three ex-Googlers who started Frogfish — we focus on lead gen businesses with complex online-to-offline conversion cycles: better measurement, true ROI, and custom AI tooling';
   var role = 'Jared runs business development at Frogfish';
 
-  var rules = 'RULES: Under 90 words. Short punchy paragraphs - 2 to 3 sentences each. Completely plain conversational tone - like a real person texting a peer, not a sales email. No exclamation marks. No "I hope", no "I wanted to reach out", no corporate speak. No closing question or CTA - added separately. Feel free to be direct and even blunt. OUTPUT PARAGRAPHS ONLY - no greeting, no signature, no subject line, no labels.';
+  var rules = 'RULES: Under 60 words total. Short punchy sentences. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No "I hope", no "I wanted to reach out", no "I am reaching out". No closing question or CTA — that is added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
 
-  // VARIANT A - AEO visibility hook
+  // VARIANT A - Search audit hook if available, otherwise clean intro
   if(variant === 'A') {
-    var aeoLine = aeoResult
-      ? 'Use this specific finding naturally in the first sentence: ' + aeoResult
-      : 'Open with the fact that you looked up ' + company + ' in ChatGPT searching the way their clients do - and they do not show up prominently.';
-    return context + aeoLine + ' Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'Para 1: The specific AI search finding. Blunt and specific - not generic. '
-      + 'Para 2: One sentence on who Frogfish is: ' + cred + '. One sentence on what they do: help ' + (niche==='legal'?'law firms':'companies like this') + ' connect ad spend to revenue that actually closes, not just lead volume. '
-      + 'Para 3: ' + offer + ' '
+    var searchLine = '';
+    if(searchAudit && !searchAudit.error && !searchAudit.found && searchAudit.topCompetitors && searchAudit.topCompetitors.length > 0) {
+      searchLine = 'IMPORTANT: Open with this specific finding - searched for their type of business in their area and ' + company + ' did not show up. ' + searchAudit.topCompetitors[0] + ' and others did. Use this as the warm opener before the intro. ';
+    } else if(searchAudit && !searchAudit.error && searchAudit.found) {
+      searchLine = 'They do show up in search results. Open warmly without the visibility angle. ';
+    }
+    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT A - SEARCH AUDIT OPENER: '
+      + searchLine
+      + 'Open with "Hope you are having a good week." Then: Jared is ' + positioning + '. Last sentence: "Thought there might be a fit." Under 50 words total. '
       + rules;
   }
 
-  // VARIANT B - Straight shot, no fluff
+  // VARIANT B - Slightly more context
   if(variant === 'B') {
-    return context + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT B - BLUNT AND SHORT: '
-      + 'Para 1: Cut straight to it - Frogfish helps ' + (niche==='legal'?'law firms':'companies like theirs') + ' figure out which ad campaigns are driving real closed business and which ones are burning budget on leads that never convert. No buildup, no question - just state it directly. '
-      + 'Para 2: ' + positioning + ' ' + cred + '. ' + cs + ' '
-      + 'Para 3: ' + offer + ' '
+    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'VARIANT B - BRIEF WITH CONTEXT: '
+      + 'Para 1: Jared is ' + positioning + '. '
+      + 'Para 2: One specific sentence about the problem firms like theirs face — spending on digital without being able to connect it to what actually closes offline. '
+      + 'Para 3: One line — happy to show what we have built. '
       + rules;
   }
 
-  // VARIANT C - Casual honest AI outreach
+  // VARIANT C - Front desk referral
   if(variant === 'C') {
+    var refLine = staffName
+      ? 'I spoke with ' + staffName + ' at your front desk yesterday — they said to email you directly.'
+      : 'I spoke with someone at your front desk yesterday — they said to email you directly.';
     return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT C - CASUAL HONEST OPENER: '
-      + 'Para 1: Open casually and directly - "Won\'t beat around the bush" - we built an AI product that does customized outbound for us, and it found them. Short, natural, like a real person talking. '
-      + 'Para 2: Frogfish is a digital marketing and AI tooling agency. One thing we have built is a tool called Zeitgeist - it pulls real-time sentiment from Reddit and X and automates ad creative execution so creatives stay current without the manual work. We want to bring it to firms like theirs. Keep it conversational, one or two sentences. '
-      + 'Para 3: Happy to buy lunch and show what we have got. No pitch - just a real conversation to see if there is any fit. '
+      + 'VARIANT C - FRONT DESK REFERRAL: '
+      + 'Para 1: Open with exactly this verbatim: "' + refLine + '" '
+      + 'Para 2: Jared is ' + positioning + '. Thought there might be a fit. '
       + rules;
   }
 
-  // VARIANT D - Lunch offer
-  if(variant === 'D') {
-    return context + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT D - LUNCH OFFER: '
-      + 'Para 1: Open by saying Jared wanted to follow up on getting lunch on the calendar for their team. Keep it casual and natural like a real follow-up, not a sales pitch. '
-      + 'Para 2: ' + positioning + ' ' + cred + '. ' + cs + ' '
-      + 'Para 3: Offer to buy lunch for the team, show what Frogfish has built, and run a free diagnostic on their current setup. No pitch - just useful. '
-      + rules;
-  }
-
-  // VARIANT E - Just ask
-  if(variant === 'E') {
-    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT E - DIRECT AND DISARMING: '
-      + 'Para 1: Open by simply asking if they would be open to a lunch or a quick 1:1. Say you are trying to cut through the noise and figured natural straightforward outreach might actually resonate more than the usual stuff. Keep it genuine and human - one or two sentences max. '
-      + 'Para 2: One sentence intro - Frogfish, ' + cred + '. We work with firms on media strategy, data analytics, and AI tooling. '
-      + 'Para 3: Just one line - That is it. Would you be open to it? Keep it that simple. '
-      + rules;
-  }
-
-  // Fallback
-  return context + 'Write a short cold email body for ' + role + ' to ' + title + ' at ' + company + '. ' + offer + ' ' + cred + '. ' + rules;
+  return 'Write one short paragraph for ' + role + ' to ' + title + ' at ' + company + '. Jared is ' + positioning + '. Under 40 words. ' + rules;
 }
 
 
@@ -491,48 +461,57 @@ async function generateEmails(leads) {
       }
       var greeting = l.firstName ? 'Hi '+l.firstName+',' : 'Hi,';
       var staffName = websiteText ? extractStaffName(websiteText) : null;
-      var availableVariants = staffName ? ['A','B','C','D','E'] : ['A','B','C','E'];
+      var availableVariants = ['A','B','C'];
       var variant = availableVariants[Math.floor(Math.random()*availableVariants.length)];
-      // Run AEO check for Variant A
+      // Run Google search audit
+      var searchAudit = null;
+      if(S.keys.googleSearchKey && S.keys.googleSearchCx) {
+        try {
+          var city = l.location && l.location.indexOf(',') > 0 ? l.location.split(',')[0].trim() : l.location;
+          var auditRes = await fetch('/search/audit', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+              searchKey: S.keys.googleSearchKey,
+              searchCx: S.keys.googleSearchCx,
+              company: l.company,
+              niche: l.niche,
+              city: city
+            })
+          });
+          searchAudit = await auditRes.json();
+          if(searchAudit && !searchAudit.error) {
+            log((searchAudit.found ? '✓ ' : '✗ ') + l.company + (searchAudit.found ? ' found in search' : ' NOT found — competitors: ' + (searchAudit.topCompetitors||[]).join(', ')), 'info');
+          }
+        } catch(e) {}
+      }
       var aeoResult = null;
       if(variant === 'A') {
         log('Running AI visibility check for '+l.company+'...','info');
         aeoResult = await checkAEO(l.company, l.niche, l.location);
       }
-      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant, staffName, aeoResult);
+      var prompt = makePrompt(l.company, l.title, l.location, n.pain, l.niche, websiteText, variant, staffName, aeoResult, searchAudit);
       var rawBody = await callAI(prompt);
       var cleanedBody = cleanBody(rawBody);
       // Multiple subject options per variant - randomly pick one
       var subjectPool = {
         A: [
-          'How '+l.company+' shows up in AI search',
-          l.company+' in ChatGPT',
-          'AI visibility - '+l.company,
-          'Quick finding on '+l.company
+          'quick note - '+l.company,
+          l.company+' - 2 minutes',
+          'Frogfish + '+l.company,
+          'quick intro'
         ],
         B: [
-          'quick note - Frogfish',
-          l.company+' - 2 minutes',
-          'something we noticed',
-          l.company+' and your pipeline'
+          'honest outreach',
+          'we built something relevant',
+          'straight up - '+l.company,
+          'cutting through the noise'
         ],
         C: [
-          'honest outreach',
-          'full transparency',
-          'straight up cold email',
-          'being upfront - '+l.company
-        ],
-        D: [
-          'Following up on lunch',
-          'lunch for the team',
-          'getting lunch on the calendar',
-          'lunch on us - '+l.company
-        ],
-        E: [
-          'lunch or a quick chat?',
-          'worth a 1:1?',
-          'quick ask - '+l.company,
-          'cutting through the noise'
+          'following up from yesterday',
+          'per our conversation',
+          'your front desk suggested I reach out',
+          'from our call yesterday'
         ]
       };
       var pool = subjectPool[variant] || subjectPool['A'];
@@ -789,12 +768,12 @@ function pageDash() {
     +'<button class="btn" style="width:100%;text-align:left;background:none;border-color:#4a7a58;color:#4a7a58" onclick="go(\'leads\')">&#128203; Lead Queue ('+S.leads.length+')</button></div>'
     +'<div class="card mb-16"><div class="label" style="color:#4ade80;margin-bottom:12px">A/B Variant Performance</div>'
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
-    +['A','B','C','D','E'].map(function(v){
+    +['A','B','C'].map(function(v){
       var vs = (S.variantStats&&S.variantStats[v])||{sent:0,opened:0,replied:0};
       var openRate = vs.sent>0?Math.round((vs.opened/vs.sent)*100):0;
       var replyRate = vs.sent>0?Math.round((vs.replied/vs.sent)*100):0;
-      var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd',E:'#fb923c'};
-      var labels = {A:'AEO Hook',B:'Straight Shot',C:'AI Honest',D:'Lunch',E:'Just Ask'};
+      var colors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24'};
+      var labels = {A:'Direct Ask',B:'Honest AI',C:'Front Desk'};
       return '<div style="background:#060c08;border:1px solid '+(colors[v]||'#1a3320')+';padding:12px;border-radius:2px">'
         +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+(colors[v]||'#4ade80')+'">'+v+'</div>'
         +'<div style="font-size:9px;color:#4a7a58;margin-bottom:8px">'+labels[v]+'</div>'
@@ -947,7 +926,9 @@ function pageSettings() {
       {id:'apollo',label:'Apollo.io',ph:'service_...',hint:'app.apollo.io - Settings - API'},
       {id:'instantly',label:'Instantly.ai',ph:'inst_...',hint:'app.instantly.ai - Settings - API'},
       {id:'googleClientId',label:'Google Client ID',ph:'475197...apps.googleusercontent.com',hint:'console.cloud.google.com - Credentials'},
-      {id:'googleClientSecret',label:'Google Client Secret',ph:'GOCSPX-...',hint:'console.cloud.google.com - Credentials'}
+      {id:'googleClientSecret',label:'Google Client Secret',ph:'GOCSPX-...',hint:'console.cloud.google.com - Credentials'},
+      {id:'googleSearchKey',label:'Google Search API Key',ph:'AIza...',hint:'console.cloud.google.com - Credentials'},
+      {id:'googleSearchCx',label:'Google Search Engine ID',ph:'a1b2c3d4e5...',hint:'cse.google.com - your search engine'}
     ].map(function(k){
       var s = ks(k.id);
       return '<div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><div class="label">'+k.label+'</div><div style="font-size:9px;color:'+s.c+'">'+s.l+'</div></div>'
