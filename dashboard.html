@@ -345,11 +345,14 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
 
   // Build search finding line if available
   var searchLine = '';
-  if(searchAudit && !searchAudit.error && !searchAudit.found && searchAudit.topCompetitors && searchAudit.topCompetitors.length > 0) {
-    var competitors = searchAudit.topCompetitors.slice(0,2).join(' and ');
-    searchLine = 'IMPORTANT SEARCH FINDING: When searching for their type of business online, ' + company + ' did not appear in the results — ' + competitors + ' did. Work this naturally and specifically into the email. Name the actual competitors: say something like "I was looking up [niche] businesses in your area and noticed ' + company + ' wasn\'t coming up — ' + competitors + ' were." Use the real competitor names. ';
-  } else if(searchAudit && !searchAudit.error && !searchAudit.found) {
-    searchLine = 'SEARCH FINDING: ' + company + ' did not appear in organic search results for their niche. Mention this naturally as something you noticed when searching for their type of business. ';
+  if(searchAudit && !searchAudit.error && !searchAudit.found) {
+    var nicheLabel = niche==='legal' ? 'personal injury law firms' : niche==='home' ? 'home service companies' : 'financial advisors';
+    if(searchAudit.topCompetitors && searchAudit.topCompetitors.length > 0) {
+      var competitors = searchAudit.topCompetitors.slice(0,2).join(' and ');
+      searchLine = 'IMPORTANT SEARCH FINDING: I searched for ' + nicheLabel + ' in their area and ' + company + ' did not appear — ' + competitors + ' did. Open the email with this specific observation naturally, naming the actual competitors. Example: "I was looking up ' + nicheLabel + ' in your area and noticed ' + company + ' wasn\'t coming up — ' + competitors + ' were." ';
+    } else {
+      searchLine = 'IMPORTANT SEARCH FINDING: I searched for ' + nicheLabel + ' in their area and ' + company + ' did not appear in the results. Open with this naturally — something like "I was looking up ' + nicheLabel + ' in your area and noticed ' + company + ' wasn\'t showing up in the results." ';
+    }
   }
 
   var rules = 'RULES: 3 complete paragraphs, max 2 sentences each. CRITICAL: Every sentence must end with a period — never cut off. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
@@ -517,8 +520,8 @@ async function generateEmails(leads) {
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = 'Re: ' + pool[Math.floor(Math.random()*pool.length)];
       var emailCount = (S.reviewQueue ? S.reviewQueue.length : 0) + 1;
-      var ps = 'P.S. If you book time with me, as a value add I will create a free animated Gmail icon custom-branded with your logo - like the one on my profile when this email landed.';
-      var fullEmail = 'Subject: '+subject+'\\n\\n'+greeting+'\\n\\n'+cleanedBody+'\\n\\n'+ps+'\\n\\nJared\\nFrogfish Consulting';
+      var ps = 'P.S. If you book time with me, as a value add I will create a free animated Gmail icon custom-branded with your logo - like the one on my profile when this email landed!';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\n'+CALENDLY+'\n\n'+ps+'\n\nJared\nVP, Business Development\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
