@@ -261,27 +261,31 @@ app.post("/search/audit", async (req, res) => {
   try {
     const nicheLabel = niche === 'legal' ? 'personal injury attorney' : niche === 'home' ? 'home services company' : 'financial advisor';
     const query = city ? `${nicheLabel} ${city}` : nicheLabel;
-    // Use Google search scraping instead of API
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`;
+    // Use DuckDuckGo HTML search - more scrape friendly than Google
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const r = await fetch(searchUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html',
+        'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-US,en;q=0.9'
       },
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(10000)
     });
     const html = await r.text();
     const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const found = html.toLowerCase().includes(companyLower) || 
-                  html.toLowerCase().includes(company.toLowerCase().split(' ')[0]);
-    // Extract competitor names from result titles
-    const titleMatches = [...html.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map(m => m[1].trim()).filter(t => t.length > 3 && t.length < 60);
+    const companyWords = company.toLowerCase().split(' ').filter(w => w.length > 3);
+    const found = companyWords.some(word => html.toLowerCase().includes(word));
+    // Extract result titles from DDG HTML
+    const titleMatches = [...html.matchAll(/class="result__title"[^>]*>.*?<a[^>]*>([^<]+)<\/a>/gs)]
+      .map(m => m[1].replace(/&amp;/g,'&').replace(/&#x27;/g,"'").trim())
+      .filter(t => t.length > 3 && t.length < 80);
     const topCompetitors = titleMatches
-      .filter(t => !t.toLowerCase().includes(companyLower))
+      .filter(t => !companyWords.some(w => t.toLowerCase().includes(w)))
       .slice(0, 3);
+    console.log(`Search audit for ${company} in ${city}: found=${found}, competitors=${topCompetitors.join(', ')}`);
     res.json({ found, query, topCompetitors, totalResults: titleMatches.length });
   } catch(e) {
+    console.error('Search audit error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
