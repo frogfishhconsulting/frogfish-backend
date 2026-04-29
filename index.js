@@ -257,26 +257,30 @@ app.post("/apollo/search", async (req, res) => {
 });
 
 app.post("/search/audit", async (req, res) => {
-  const { searchKey, searchCx, company, niche, city } = req.body;
-  if (!searchKey || !searchCx) return res.json({ error: "Missing search credentials" });
+  const { company, niche, city } = req.body;
   try {
-    const nicheLabel = niche === 'legal' ? 'personal injury attorney' : niche === 'home' ? 'home services' : 'financial advisor';
+    const nicheLabel = niche === 'legal' ? 'personal injury attorney' : niche === 'home' ? 'home services company' : 'financial advisor';
     const query = city ? `${nicheLabel} ${city}` : nicheLabel;
-    const url = `https://www.googleapis.com/customsearch/v1?key=${searchKey}&cx=${searchCx}&q=${encodeURIComponent(query)}&num=10`;
-    const r = await fetch(url);
-    const data = await r.json();
-    if (data.error) return res.json({ error: data.error.message });
-    const results = (data.items || []).map(item => item.title + ' - ' + item.displayLink);
-    const companyLower = company.toLowerCase();
-    const found = (data.items || []).some(item =>
-      item.title.toLowerCase().includes(companyLower) ||
-      item.displayLink.toLowerCase().includes(companyLower.replace(/\s+/g, ''))
-    );
-    const topCompetitors = (data.items || [])
-      .filter(item => !item.title.toLowerCase().includes(companyLower))
-      .slice(0, 3)
-      .map(item => item.title.split('|')[0].split('-')[0].trim());
-    res.json({ found, query, topCompetitors, totalResults: (data.items || []).length });
+    // Use Google search scraping instead of API
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`;
+    const r = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html',
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+    const html = await r.text();
+    const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const found = html.toLowerCase().includes(companyLower) || 
+                  html.toLowerCase().includes(company.toLowerCase().split(' ')[0]);
+    // Extract competitor names from result titles
+    const titleMatches = [...html.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map(m => m[1].trim()).filter(t => t.length > 3 && t.length < 60);
+    const topCompetitors = titleMatches
+      .filter(t => !t.toLowerCase().includes(companyLower))
+      .slice(0, 3);
+    res.json({ found, query, topCompetitors, totalResults: titleMatches.length });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
