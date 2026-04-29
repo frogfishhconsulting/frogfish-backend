@@ -42,6 +42,13 @@ async function initDB() {
       global.gmailTokens = tokens;
       global.gmailTokenExpiry = Date.now() + 3500000; // ~1hr, will refresh on next use
       console.log("Gmail tokens restored from DB");
+    // Restore Google credentials from DB
+    try {
+      const secretRow = await pool.query("SELECT value FROM settings WHERE key = 'googleClientSecret'");
+      if (secretRow.rows.length > 0) { global.googleClientSecret = secretRow.rows[0].value; console.log("Google client secret loaded from DB"); }
+      const clientIdRow = await pool.query("SELECT value FROM settings WHERE key = 'googleClientId'");
+      if (clientIdRow.rows.length > 0) { global.googleClientId = clientIdRow.rows[0].value; console.log("Google client ID loaded from DB"); }
+    } catch(e) { console.log("Could not load Google creds from DB:", e.message); }
     }
     console.log("DB initialized");
   } catch(e) {
@@ -379,11 +386,13 @@ app.post("/gmail/send", async (req, res) => {
   try {
     // Convert escaped newlines to real newlines
     const cleanBody = body.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
-    const sendData = await sendGmailMessage(to, subject, cleanBody);
+    // Clean subject - remove any newlines that got embedded
+    const cleanSubject = subject.replace(/\\n.*/g, '').replace(/\n.*/g, '').trim();
+    const sendData = await sendGmailMessage(to, cleanSubject, cleanBody);
     if (sendData.error) return res.status(400).json({ error: sendData.error.message });
     console.log(`Gmail sent to ${to}: ${sendData.id}`);
     // Schedule follow-ups
-    await scheduleFollowUps(to, subject, firstName, niche);
+    await scheduleFollowUps(to, cleanSubject, firstName, niche);
     res.json({ success: true, messageId: sendData.id });
   } catch(e) {
     console.error('Gmail send error:', e.message);
