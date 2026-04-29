@@ -377,7 +377,9 @@ app.post("/gmail/send", async (req, res) => {
   const { to, subject, body, firstName, company, niche } = req.body;
   if (!global.gmailTokens) return res.status(400).json({ error: "Gmail not connected. Go to Settings and connect Gmail first." });
   try {
-    const sendData = await sendGmailMessage(to, subject, body);
+    // Convert escaped newlines to real newlines
+    const cleanBody = body.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+    const sendData = await sendGmailMessage(to, subject, cleanBody);
     if (sendData.error) return res.status(400).json({ error: sendData.error.message });
     console.log(`Gmail sent to ${to}: ${sendData.id}`);
     // Schedule follow-ups
