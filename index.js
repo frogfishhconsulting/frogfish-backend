@@ -279,9 +279,19 @@ app.post("/search/audit", async (req, res) => {
     const titleMatches = [...html.matchAll(/class="result__title"[^>]*>.*?<a[^>]*>([^<]+)<\/a>/gs)]
       .map(m => m[1].replace(/&amp;/g,'&').replace(/&#x27;/g,"'").trim())
       .filter(t => t.length > 3 && t.length < 80);
-    const topCompetitors = titleMatches
+    // Filter out ad-style titles (no fees, free, call now, etc.)
+    const adPatterns = ['no fee', 'no upfront', 'free case', 'free consult', 'call now', 'call today', 'speak to', 'talk to', 'get paid', 'largest ', 'dominating', 'top 10', 'best ', 'find a', 'near me', 'find an', 'state bar', 'attorney at'];
+    // Try to extract domains from DDG result URLs
+    const domainMatches = [...html.matchAll(/result__url[^>]*>\s*([^<\s]+)/g)]
+      .map(m => m[1].trim().replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, ''))
+      .filter(d => d.length > 4 && d.includes('.') && !['google','bing','yahoo','yelp','wikipedia','facebook','linkedin'].some(s => d.includes(s)))
+      .filter(d => !companyWords.some(w => d.toLowerCase().includes(w)));
+    const filteredTitles = titleMatches
       .filter(t => !companyWords.some(w => t.toLowerCase().includes(w)))
-      .slice(0, 3);
+      .filter(t => !adPatterns.some(p => t.toLowerCase().includes(p)))
+      .filter(t => /[A-Z]/.test(t) && t.split(' ').length >= 2 && t.split(' ').length <= 6)
+      .slice(0, 2);
+    const topCompetitors = domainMatches.length >= 2 ? domainMatches.slice(0,2) : filteredTitles;
     console.log(`Search audit for ${company} in ${city}: found=${found}, competitors=${topCompetitors.join(', ')}`);
     res.json({ found, query, topCompetitors, totalResults: titleMatches.length });
   } catch(e) {
