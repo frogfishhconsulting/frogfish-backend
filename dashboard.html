@@ -515,7 +515,7 @@ async function generateEmails(leads) {
         ]
       };
       var pool = subjectPool[variant] || subjectPool['A'];
-      var subject = pool[Math.floor(Math.random()*pool.length)];
+      var subject = 'Re: ' + pool[Math.floor(Math.random()*pool.length)];
       var emailCount = (S.reviewQueue ? S.reviewQueue.length : 0) + 1;
       var ps = 'P.S. If you book time with me, as a value add I will create a free animated Gmail icon custom-branded with your logo - like the one on my profile when this email landed.';
       var fullEmail = 'Subject: '+subject+'\\n\\n'+greeting+'\\n\\n'+cleanedBody+'\\n\\n'+ps+'\\n\\nJared\\nFrogfish Consulting';
@@ -621,17 +621,17 @@ async function approveEmail(id) {
     return;
   }
   try {
-    var r = await fetch('/instantly/send', {
+    var r = await fetch('/gmail/send', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        instantlyKey: S.keys.instantly,
         to: item.email,
         subject: subject,
         body: emailBody,
         firstName: item.firstName,
         company: item.company,
-        niche: item.niche
+        niche: item.niche,
+        instantlyKey: S.keys.instantly
       })
     });
     var result = await r.json();
