@@ -514,7 +514,7 @@ async function generateEmails(leads) {
       };
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = pool[Math.floor(Math.random()*pool.length)];
-      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nJared\nFrogfish Consulting';
+      var emailCount = (S.reviewQueue ? S.reviewQueue.length : 0) + 1; var ps = (emailCount % 4 === 0) ? '\\n\\nP.S. If you book time with me I will also put together a custom profile icon for your inbox - like the one tied to my name when this landed.' : ''; var fullEmail = 'Subject: '+subject+'\\n\\n'+greeting+'\\n\\n'+cleanedBody+ps+'\\n\\nJared\\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -819,7 +819,7 @@ function pageReview() {
       +'<div style="font-size:12px;color:#c0e8c8;margin-top:3px">'+(item.contact!=='Unknown'?item.contact:'')+'</div>'
       +'<div style="font-size:11px;color:#4ade80;margin-top:2px">'+item.title+'</div>'
       +'<div style="font-size:10px;color:#2d5c3a;margin-top:2px">'+item.email+'</div>'
-      +'</div><div style="display:flex;align-items:center;gap:12px">'+pill+'<span style="font-size:9px;color:#2d5c3a">'+item.generatedAt+'</span></div></div>'
+      +'</div><div style="display:flex;align-items:center;gap:8px">'+pill+'<span style="font-size:9px;color:#2d5c3a">'+item.generatedAt+'</span> <button onclick="searchLead(\''+item.niche+'\',\''+encodeURIComponent(item.location||'')+'\');" style="background:none;border:1px solid #1a3320;color:#4a7a58;font-size:9px;padding:2px 8px;border-radius:2px;cursor:pointer;font-family:DM Mono,monospace">&#128269; Search</button></div></div>'
       +'<div style="background:#060c08;border:1px solid #1a3320;border-radius:2px;padding:12px 14px;margin-bottom:12px"><div style="font-size:9px;color:#2d5c3a;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">Subject</div><div style="font-size:12px;color:#4ade80">'+subjectLine+'</div></div>'
       +(isEditing
         ?'<div style="margin-bottom:12px"><textarea id="edit_'+item.id+'" class="email-edit">'+item.body+'</textarea></div>'
@@ -1125,6 +1125,12 @@ window.connectGmail = async function() {
   window.open('/auth/gmail?clientId='+encodeURIComponent(S.keys.googleClientId), '_blank');
 };
 window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
+window.searchLead = function(niche, location) {
+  var nl = niche==='legal'?'personal injury attorney':niche==='home'?'home services company':'financial advisor';
+  var city = decodeURIComponent(location).split(',')[0].trim();
+  var q = encodeURIComponent(nl + (city ? ' ' + city : ''));
+  window.open('https://www.google.com/search?q=' + q, '_blank');
+};
 window.markRead = function(idx){ if(S.replies[idx]) S.replies[idx].read=true; set({}); };
 window.skipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:true}):l; }); set({}); };
 window.unskipLead = function(id){ S.leads=S.leads.map(function(l){ return l.id===id?Object.assign({},l,{skipped:false}):l; }); set({}); };
