@@ -95,7 +95,7 @@ app.get("/auth/gmail", (req, res) => {
   const clientId = req.query.clientId || process.env.GOOGLE_CLIENT_ID;
   if (!clientId) return res.status(400).send("Missing Google Client ID. Add it in Settings.");
   const redirectUri = "https://frogfish-backend-production.up.railway.app/auth/gmail/callback";
-  const scope = "https://www.googleapis.com/auth/gmail.readonly";
+  const scope = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${encodeURIComponent(clientId)}`;
   res.redirect(url);
 });
@@ -314,6 +314,79 @@ app.post("/research/company", async (req, res) => {
       .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     res.json({ text, domain });
   } catch(e) { res.json({ text: '', domain, error: e.message }); }
+});
+
+// Helper to send a single Gmail message
+async function sendGmailMessage(to, subject, body) {
+  const token = await getAccessToken();
+  const emailLines = [
+    `From: Jared Flanders <jared@frogfishconsulting.com>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Content-Type: text/plain; charset=utf-8`,
+    ``,
+    body
+  ];
+  const raw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw })
+  });
+  return await sendRes.json();
+}
+
+// Schedule follow-up emails using setTimeout (persisted via DB)
+async function scheduleFollowUps(to, subject, firstName, niche) {
+  const nicheLabel = niche === 'legal' ? 'law firms' : niche === 'home' ? 'home service companies' : 'financial firms';
+  const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
+  const followUp2 = `${greeting}\n\nJust wanted to make sure my last note didn't get buried.\n\nShort version: I help ${nicheLabel} figure out which ad campaigns are actually driving closed business — not just leads. Happy to show you what we've built.\n\nJared\nFrogfish Consulting`;
+  const followUp3 = `${greeting}\n\nLast one from me — if the timing isn't right, no worries.\n\nIf you ever want to know how your firm shows up when someone searches in ChatGPT or Google AI, happy to run that free. Just reply and I'll send it over.\n\nJared\nFrogfish Consulting`;
+
+  // Save follow-ups to DB
+  if (pool) {
+    try {
+      const followUpData = JSON.stringify({ to, subject, firstName, niche, followUp2, followUp3, sentAt: new Date().toISOString() });
+      await pool.query(
+        `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        [`followup_${to.replace('@','_at_').replace(/\./g,'_')}`, followUpData]
+      );
+    } catch(e) { console.error('Failed to save follow-up:', e.message); }
+  }
+
+  // Schedule in memory (4 days and 8 days)
+  const day4 = 4 * 24 * 60 * 60 * 1000;
+  const day8 = 8 * 24 * 60 * 60 * 1000;
+  setTimeout(async () => {
+    if (!global.gmailTokens) return;
+    try {
+      await sendGmailMessage(to, 'Re: ' + subject, followUp2);
+      console.log(`Follow-up 1 sent to ${to}`);
+    } catch(e) { console.error('Follow-up 1 failed:', e.message); }
+  }, day4);
+  setTimeout(async () => {
+    if (!global.gmailTokens) return;
+    try {
+      await sendGmailMessage(to, 'Re: ' + subject, followUp3);
+      console.log(`Follow-up 2 sent to ${to}`);
+    } catch(e) { console.error('Follow-up 2 failed:', e.message); }
+  }, day8);
+}
+
+app.post("/gmail/send", async (req, res) => {
+  const { to, subject, body, firstName, company, niche } = req.body;
+  if (!global.gmailTokens) return res.status(400).json({ error: "Gmail not connected. Go to Settings and connect Gmail first." });
+  try {
+    const sendData = await sendGmailMessage(to, subject, body);
+    if (sendData.error) return res.status(400).json({ error: sendData.error.message });
+    console.log(`Gmail sent to ${to}: ${sendData.id}`);
+    // Schedule follow-ups
+    await scheduleFollowUps(to, subject, firstName, niche);
+    res.json({ success: true, messageId: sendData.id });
+  } catch(e) {
+    console.error('Gmail send error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post("/instantly/send", async (req, res) => {
