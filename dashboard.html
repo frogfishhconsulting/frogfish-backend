@@ -514,7 +514,9 @@ async function generateEmails(leads) {
       };
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = pool[Math.floor(Math.random()*pool.length)];
-      var emailCount = (S.reviewQueue ? S.reviewQueue.length : 0) + 1; var ps = (emailCount % 4 === 0) ? '\\n\\nP.S. If you book time with me I will also put together a custom profile icon for your inbox - like the one tied to my name when this landed.' : ''; var fullEmail = 'Subject: '+subject+'\\n\\n'+greeting+'\\n\\n'+cleanedBody+ps+'\\n\\nJared\\nFrogfish Consulting';
+      var emailCount = (S.reviewQueue ? S.reviewQueue.length : 0) + 1;
+      var ps = (emailCount % 4 === 0) ? '\n\nP.S. If you book time with me I will also put together a custom profile icon for your inbox - like the one tied to my name when this landed.' : '';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+ps+'\n\nJared\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
