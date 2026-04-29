@@ -246,7 +246,7 @@ async function callAI(prompt) {
   if(S.keys.anthropic) h['x-api-key'] = S.keys.anthropic;
   var r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', headers: h,
-    body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:600, messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:1024, messages:[{role:'user',content:prompt}]})
   });
   var d = await r.json();
   if(d.error) throw new Error(d.error.message);
@@ -465,15 +465,12 @@ async function generateEmails(leads) {
       var variant = availableVariants[Math.floor(Math.random()*availableVariants.length)];
       // Run Google search audit
       var searchAudit = null;
-      if(S.keys.googleSearchKey && S.keys.googleSearchCx) {
-        try {
+      try {
           var city = l.location && l.location.indexOf(',') > 0 ? l.location.split(',')[0].trim() : l.location;
           var auditRes = await fetch('/search/audit', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({
-              searchKey: S.keys.googleSearchKey,
-              searchCx: S.keys.googleSearchCx,
               company: l.company,
               niche: l.niche,
               city: city
@@ -484,11 +481,8 @@ async function generateEmails(leads) {
             log((searchAudit.found ? '✓ ' : '✗ ') + l.company + (searchAudit.found ? ' found in search results' : ' NOT found — competitors: ' + (searchAudit.topCompetitors||[]).join(', ')), 'info');
           } else if(searchAudit && searchAudit.error) {
             log('Search audit error for '+l.company+': '+searchAudit.error,'error');
-          } else if(!S.keys.googleSearchKey || !S.keys.googleSearchCx) {
-            log('No Google Search keys set - skipping audit','info');
           }
-        } catch(e) {}
-      }
+        } catch(e) { console.log('Search audit failed:', e.message); }
       var aeoResult = null;
       if(variant === 'A') {
         log('Running AI visibility check for '+l.company+'...','info');
