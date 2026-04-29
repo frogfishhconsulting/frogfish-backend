@@ -608,7 +608,8 @@ async function approveEmail(id) {
 
   // Extract subject and body from active variant
   var activeBody = (item.activeVariant==='B' && item.bodyB) ? item.bodyB : item.body;
-  var lines = activeBody.split('\n');
+  var normalizedBody = activeBody.replace(/\\\\n/g, '\\n');
+  var lines = normalizedBody.split('\\n');
   var subject = lines[0].replace('Subject: ','').trim();
   var emailBody = lines.slice(2).join('\n').trim();
 
@@ -799,7 +800,8 @@ function pageReview() {
   }
   var summary = '<div class="card mb-16"><div class="flex-between"><div><div class="label" style="color:#4ade80;margin-bottom:8px">Review Queue - '+S.reviewQueue.length+' Emails</div>'
     +'<div style="display:flex;gap:16px"><span style="font-size:11px;color:#fbbf24">&#9679; '+pending.length+' pending</span><span style="font-size:11px;color:#4ade80">&#10003; '+approved.length+' approved</span><span style="font-size:11px;color:#f87171">&#10007; '+rejected.length+' rejected</span></div></div>'
-    +(pending.length>1?'<button class="btn-approve" onclick="approveAll()">&#9989; Approve All ('+pending.length+')</button>':'')+'</div></div>';
+    +(pending.length>1?'<button class="btn-approve" onclick="approveAll()">&#9989; Approve All ('+pending.length+')</button>':'')
+    +'<button class="btn-ghost btn-sm" style="margin-left:8px" onclick="S.reviewQueue=[];set({});">&#128465; Reset Queue</button>'
   var cards = S.reviewQueue.map(function(item) {
     var isEditing = S.editingId===item.id;
     var lines = item.body.split('\n');
