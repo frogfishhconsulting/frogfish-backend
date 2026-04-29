@@ -114,7 +114,7 @@ var S = {
   variantStats: {A:{sent:0,opened:0,replied:0},B:{sent:0,opened:0,replied:0},C:{sent:0,opened:0,replied:0}},
   scanning: false, scanProg: 0,
   lastError: null,
-  pullLimit: 5, maxPerCompany: 1,
+  pullLimit: 100, maxPerCompany: 1,
   autoScan: false, autoScanInterval: null, apolloPage: 1, gmailConnected: false,
   log: [
     {t:'09:14 AM', m:'Agent ready - run a scan to get started', c:'info'}
@@ -343,7 +343,7 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
   var positioning = 'one of three ex-Googlers who started Frogfish — we focus on lead gen businesses with complex online-to-offline conversion cycles: better measurement, true ROI, and custom AI tooling';
   var role = 'Jared runs business development at Frogfish';
 
-  var rules = 'RULES: Under 80 words total. Every sentence must be complete - never cut off mid-thought. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — those are added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
+  var rules = 'RULES: 3 complete paragraphs, max 2 sentences each. CRITICAL: Every single sentence must be 100% complete with a period - never end mid-word or mid-thought. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
 
   // VARIANT A - Search audit hook if available, otherwise clean intro
   if(variant === 'A') {
