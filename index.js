@@ -382,17 +382,19 @@ async function sendGmailMessage(to, subject, body) {
   const token = await getAccessToken();
   // Convert plain text to HTML with clickable links and tracking
   const trackingPixel = `<img src="https://frogfish-backend-production.up.railway.app/track/open?email=${encodeURIComponent(to)}" width="1" height="1" style="display:none" />`;
+  // First escape HTML, then convert newlines, then make links clickable
   const htmlBody = body
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/(https?:\/\/[^\s]+)/g, (url) => {
-      const tracked = `https://frogfish-backend-production.up.railway.app/track/click?email=${encodeURIComponent(to)}&url=${encodeURIComponent(url)}`;
-      // Special label for Calendly
-      const label = url.includes('calendly') ? 'Book Time Here' : url;
-      return `<a href="${tracked}" style="color:#0066cc">${label}</a>`;
-    })
-    .replace(/\n/g, '<br>') + trackingPixel;
+    .replace(/\n/g, '<br>')
+    .replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+      // Decode any HTML entities in URL first
+      const cleanUrl = url.replace(/&amp;/g, '&');
+      const tracked = `https://frogfish-backend-production.up.railway.app/track/click?email=${encodeURIComponent(to)}&url=${encodeURIComponent(cleanUrl)}`;
+      const label = cleanUrl.includes('calendly') ? 'Book Time Here' : cleanUrl;
+      return `<a href="${tracked}" style="color:#0066cc;font-weight:bold">${label}</a>`;
+    }) + '<br>' + trackingPixel;
   const boundary = 'boundary_' + Date.now();
   const emailLines = [
     `From: Jared Flanders <jared@frogfishconsulting.com>`,
