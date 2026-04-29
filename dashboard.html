@@ -343,30 +343,32 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
   var positioning = 'one of three ex-Googlers who started Frogfish — we focus on lead gen businesses with complex online-to-offline conversion cycles: better measurement, true ROI, and custom AI tooling';
   var role = 'Jared runs business development at Frogfish';
 
-  var rules = 'RULES: 3 complete paragraphs, max 2 sentences each. CRITICAL: Every single sentence must be 100% complete with a period - never end mid-word or mid-thought. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
+  // Build search finding line if available
+  var searchLine = '';
+  if(searchAudit && !searchAudit.error && !searchAudit.found && searchAudit.topCompetitors && searchAudit.topCompetitors.length > 0) {
+    var competitors = searchAudit.topCompetitors.slice(0,2).join(' and ');
+    searchLine = 'IMPORTANT SEARCH FINDING: When searching for their type of business online, ' + company + ' did not appear in the results — ' + competitors + ' did. Work this naturally and specifically into the email. Name the actual competitors: say something like "I was looking up [niche] businesses in your area and noticed ' + company + ' wasn\'t coming up — ' + competitors + ' were." Use the real competitor names. ';
+  } else if(searchAudit && !searchAudit.error && !searchAudit.found) {
+    searchLine = 'SEARCH FINDING: ' + company + ' did not appear in organic search results for their niche. Mention this naturally as something you noticed when searching for their type of business. ';
+  }
 
-  // VARIANT A - Search audit hook if available, otherwise clean intro
+  var rules = 'RULES: 3 complete paragraphs, max 2 sentences each. CRITICAL: Every sentence must end with a period — never cut off. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
+
+  // VARIANT A - Search audit opener
   if(variant === 'A') {
-    var searchLine = '';
-    if(searchAudit && !searchAudit.error && !searchAudit.found && searchAudit.topCompetitors && searchAudit.topCompetitors.length > 0) {
-      searchLine = 'IMPORTANT: Open with this specific finding - searched for their type of business in their area and ' + company + ' did not show up. ' + searchAudit.topCompetitors[0] + ' and others did. Use this as the warm opener before the intro. ';
-    } else if(searchAudit && !searchAudit.error && searchAudit.found) {
-      searchLine = 'They do show up in search results. Open warmly without the visibility angle. ';
-    }
-    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT A - SEARCH AUDIT OPENER: '
-      + searchLine
-      + 'Open with "Hope you are having a good week." Then: Jared is ' + positioning + '. Last sentence: "Thought there might be a fit." Under 50 words total. '
+    return searchLine + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'Para 1: ' + (searchLine ? 'Use the search finding above as a natural warm opener.' : 'Open with "Hope you are having a good week."') + ' '
+      + 'Para 2: Jared is ' + positioning + '. '
+      + 'Para 3: "Thought there might be a fit — happy to show you what we have built." '
       + rules;
   }
 
-  // VARIANT B - Slightly more context
+  // VARIANT B - Direct with search finding if available
   if(variant === 'B') {
-    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT B - BRIEF WITH CONTEXT: '
-      + 'Para 1: Jared is ' + positioning + '. '
-      + 'Para 2: One specific sentence about the problem firms like theirs face — spending on digital without being able to connect it to what actually closes offline. '
-      + 'Para 3: One line — happy to show what we have built. '
+    return searchLine + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
+      + 'Para 1: ' + (searchLine ? 'Open with the search finding naturally.' : 'Get straight to the point.') + ' Jared is ' + positioning + '. '
+      + 'Para 2: One sentence — we help firms figure out which ad spend is driving real closed business vs leads that never convert. '
+      + 'Para 3: Happy to show you what we have built. '
       + rules;
   }
 
@@ -376,13 +378,13 @@ function makePrompt(company, title, location, pain, niche, websiteContext, varia
       ? 'I spoke with ' + staffName + ' at your front desk yesterday — they said to email you directly.'
       : 'I spoke with someone at your front desk yesterday — they said to email you directly.';
     return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'VARIANT C - FRONT DESK REFERRAL: '
-      + 'Para 1: Open with exactly this verbatim: "' + refLine + '" '
+      + 'Para 1: Open with exactly: "' + refLine + '" '
       + 'Para 2: Jared is ' + positioning + '. Thought there might be a fit. '
+      + (searchLine ? 'Also naturally mention: ' + searchLine : '')
       + rules;
   }
 
-  return 'Write one short paragraph for ' + role + ' to ' + title + ' at ' + company + '. Jared is ' + positioning + '. Under 40 words. ' + rules;
+  return searchLine + 'Write a short 2 paragraph cold email for ' + role + ' to ' + title + ' at ' + company + '. Jared is ' + positioning + '. ' + rules;
 }
 
 
