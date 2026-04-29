@@ -521,7 +521,7 @@ async function generateEmails(leads) {
       var subject = 'Re: ' + pool[Math.floor(Math.random()*pool.length)];
       var emailCount = (S.reviewQueue ? S.reviewQueue.length : 0) + 1;
       var ps = 'P.S. If you book time with me, as a value add I will create a free animated Gmail icon custom-branded with your logo - like the one on my profile when this email landed!';
-      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\n'+CALENDLY+'\n\n'+ps+'\n\nJared\nVP, Business Development\nFrogfish Consulting';
+      var fullEmail = 'Subject: '+subject+'\n\n'+greeting+'\n\n'+cleanedBody+'\n\nBook Time Here:\n'+CALENDLY+'\n\n'+ps+'\n\nJared\nVP, Business Development\nFrogfish Consulting';
       var item = {
         id: 'rq_'+l.id,
         leadId: l.id,
@@ -611,11 +611,11 @@ async function approveEmail(id) {
 
   // Extract subject and body from active variant
   var activeBody = (item.activeVariant==='B' && item.bodyB) ? item.bodyB : item.body;
-  var normalizedBody = activeBody.replace(/\\\\n/g, '\\n');
-  var lines = normalizedBody.split('\\n');
+  // Extract subject and body - handle both escaped and real newlines
+  var normalizedBody = activeBody.replace(/\\n/g, '\n');
+  var lines = normalizedBody.split('\n');
   var subject = lines[0].replace('Subject: ','').trim();
   var emailBody = lines.slice(2).join('\n').trim();
-
   // Send via Instantly
   if(!S.keys.instantly) {
     var errMsg = 'Instantly not configured - add API key in Settings';
@@ -660,7 +660,7 @@ async function approveEmail(id) {
   S.sent = S.sent+1;
   if(item.variant && S.variantStats[item.variant]) S.variantStats[item.variant].sent++;
   if(item.email && S.seenEmails.indexOf(item.email)===-1) S.seenEmails.push(item.email);
-  S.sentLog.unshift({email:item.email,company:item.company,contact:item.contact,title:item.title,variant:item.variant||'A',subject:(item.body||'').split('\n')[0].replace('Subject: ',''),sentAt:new Date().toLocaleString()});
+  S.sentLog.unshift({email:item.email,company:item.company,contact:item.contact,title:item.title,variant:item.variant||'A',subject:(item.body||'').split('\n')[0].replace('Subject: ',''),sentAt:new Date().toLocaleString(),emailId:result&&result.emailId?result.emailId:null,opens:0,clicks:0});
   set({});
   saveStateToServer();
 }
@@ -882,7 +882,7 @@ function pageSent() {
   var variantColors = {A:'#4ade80',B:'#7dd3fc',C:'#fbbf24',D:'#c4b5fd'};
   if(S.sentLog.length===0) return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:28px;margin-bottom:12px">&#128231;</div><div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:#4ade80;margin-bottom:8px">No Emails Sent Yet</div><div style="font-size:12px;color:#4a7a58">Approve emails in the Review Queue to build your sent log.</div></div>';
   var stats = '<div class="grid-4 mb-16">'+[['Total Sent',S.sentLog.length],['Unique Companies',new Set(S.sentLog.map(function(e){return e.company;})).size],['Seen All Time',S.seenEmails.length],['Won\'t Duplicate',S.seenEmails.length]].map(function(x){return '<div class="card"><div class="label">'+x[0]+'</div><div style="font-family:Syne,sans-serif;font-size:32px;font-weight:800;color:#4ade80">'+x[1]+'</div></div>';}).join('')+'</div>';
-  var rows = S.sentLog.map(function(e){return '<div style="display:grid;grid-template-columns:1.6fr 1.2fr 60px 60px 1fr;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #1a3320"><div><div style="font-size:12px;color:#c0e8c8">'+e.company+'</div><div style="font-size:10px;color:#2d5c3a">'+e.email+'</div></div><div style="font-size:11px;color:#9dc8a8">'+(e.contact||'')+'</div><div><span style="background:#0a0f0d;border:1px solid '+(variantColors[e.variant||'A']||'#4a7a58')+';color:'+(variantColors[e.variant||'A']||'#4a7a58')+';font-size:9px;padding:2px 8px;border-radius:2px">'+(e.variant||'A')+'</span></div><div>'+(e.replied?'<span style="color:#c4b5fd;font-size:10px">&#9993; Replied</span>':'')+'</div><div style="font-size:10px;color:#2d5c3a">'+(e.sentAt||'')+'</div></div>';}).join('');
+  var rows = S.sentLog.map(function(e){return '<div style="display:grid;grid-template-columns:1.4fr 1fr 50px 80px 80px 1fr;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #1a3320"><div><div style="font-size:12px;color:#c0e8c8">'+e.company+'</div><div style="font-size:10px;color:#2d5c3a">'+e.email+'</div></div><div style="font-size:11px;color:#9dc8a8">'+(e.contact||'')+'</div><div><span style="background:#0a0f0d;border:1px solid '+(variantColors[e.variant||'A']||'#4a7a58')+';color:'+(variantColors[e.variant||'A']||'#4a7a58')+';font-size:9px;padding:2px 8px;border-radius:2px">'+(e.variant||'A')+'</span></div>'+'<div style="font-size:10px;color:'+(e.opens>0?'#4ade80':'#2d5c3a')+'">'+(e.opens>0?'&#128065; '+e.opens+' open'+(e.opens>1?'s':''):'-')+'</div>'+'<div style="font-size:10px;color:'+(e.clicks>0?'#fbbf24':'#2d5c3a')+'">'+(e.clicks>0?'&#128070; '+e.clicks+' click'+(e.clicks>1?'s':''):'-')+'</div>'+'<div style="font-size:10px;color:#2d5c3a">'+(e.sentAt||'')+'</div></div>';}).join('');
   return stats+'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Sent Log</div><button class="btn-ghost btn-sm" onclick="clearSentLog()">Clear</button></div>'+rows+'</div>';
 }
 
@@ -1191,6 +1191,20 @@ if(checkLogin()) {
 // Poll for Instantly webhook events every 30 seconds
 async function pollEvents() {
   try {
+    // Fetch open/click tracking stats
+    var trackRes = await fetch('/track/stats');
+    var trackData = await trackRes.json();
+    var trackUpdated = false;
+    Object.keys(trackData).forEach(function(email) {
+      var logItem = S.sentLog.filter(function(s){ return s.email===email; })[0];
+      if(logItem) {
+        if(trackData[email].opens > 0 && !logItem.opened) { logItem.opened = true; trackUpdated = true; }
+        if(trackData[email].clicks > 0 && !logItem.clicked) { logItem.clicked = true; trackUpdated = true; }
+      }
+    });
+    if(trackUpdated) set({});
+  } catch(e) {}
+  try {
     // Check if backend scheduler triggered a scan
     var schedRes = await fetch('/scheduler/status');
     var schedData = await schedRes.json();
@@ -1268,6 +1282,23 @@ async function pollEvents() {
       }
     });
     if(updated) set({});
+  } catch(e) {}
+  // Poll tracking stats
+  try {
+    var trackRes = await fetch('/track/stats');
+    var trackData = await trackRes.json();
+    var trackUpdated = false;
+    S.sentLog.forEach(function(e) {
+      if(e.emailId && trackData[e.emailId]) {
+        var t = trackData[e.emailId];
+        if(t.opens > (e.opens||0) || t.clicks > (e.clicks||0)) {
+          e.opens = t.opens || 0;
+          e.clicks = t.clicks || 0;
+          trackUpdated = true;
+        }
+      }
+    });
+    if(trackUpdated) set({});
   } catch(e) {}
   setTimeout(pollEvents, 30000);
 }
