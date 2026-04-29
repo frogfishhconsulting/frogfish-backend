@@ -221,6 +221,60 @@ app.get("/gmail/status", (req, res) => {
   res.json({ connected: !!global.gmailTokens });
 });
 
+// Email open tracking pixel
+app.get("/track/open/:emailId", (req, res) => {
+  const emailId = req.params.emailId;
+  if (!global.emailTracking) global.emailTracking = {};
+  if (!global.emailTracking[emailId]) global.emailTracking[emailId] = { opens: 0, clicks: 0, firstOpen: null };
+  global.emailTracking[emailId].opens++;
+  if (!global.emailTracking[emailId].firstOpen) global.emailTracking[emailId].firstOpen = new Date().toISOString();
+  console.log(`Email opened: ${emailId} (total opens: ${global.emailTracking[emailId].opens})`);
+  // Persist to DB
+  if (pool) {
+    pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [`track_${emailId}`, JSON.stringify(global.emailTracking[emailId])]
+    ).catch(e => console.error('Track save error:', e.message));
+  }
+  // Return 1x1 transparent GIF
+  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.set('Content-Type', 'image/gif');
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(pixel);
+});
+
+// Click tracking redirect
+app.get("/track/click/:emailId", (req, res) => {
+  const emailId = req.params.emailId;
+  const url = req.query.url;
+  if (!global.emailTracking) global.emailTracking = {};
+  if (!global.emailTracking[emailId]) global.emailTracking[emailId] = { opens: 0, clicks: 0, firstOpen: null };
+  global.emailTracking[emailId].clicks++;
+  global.emailTracking[emailId].lastClick = new Date().toISOString();
+  console.log(`Email clicked: ${emailId}`);
+  if (pool) {
+    pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [`track_${emailId}`, JSON.stringify(global.emailTracking[emailId])]
+    ).catch(e => console.error('Track save error:', e.message));
+  }
+  res.redirect(url || 'https://calendly.com/frogfishconsulting/discovery');
+});
+
+// Get tracking stats
+app.get("/track/stats", async (req, res) => {
+  try {
+    if (pool) {
+      const result = await pool.query("SELECT key, value FROM settings WHERE key LIKE 'track_%'");
+      const stats = {};
+      result.rows.forEach(row => { stats[row.key.replace('track_', '')] = JSON.parse(row.value); });
+      res.json(stats);
+    } else {
+      res.json(global.emailTracking || {});
+    }
+  } catch(e) { res.json(global.emailTracking || {}); }
+});
+
 app.post("/gmail/save-credentials", (req, res) => {
   const { clientSecret } = req.body;
   if (clientSecret) global.googleClientSecret = clientSecret;
@@ -326,13 +380,38 @@ app.post("/research/company", async (req, res) => {
 // Helper to send a single Gmail message
 async function sendGmailMessage(to, subject, body) {
   const token = await getAccessToken();
+  // Convert plain text to HTML with clickable links and tracking
+  const trackingPixel = `<img src="https://frogfish-backend-production.up.railway.app/track/open?email=${encodeURIComponent(to)}" width="1" height="1" style="display:none" />`;
+  const htmlBody = body
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/(https?:\/\/[^\s]+)/g, (url) => {
+      const tracked = `https://frogfish-backend-production.up.railway.app/track/click?email=${encodeURIComponent(to)}&url=${encodeURIComponent(url)}`;
+      // Special label for Calendly
+      const label = url.includes('calendly') ? 'Book Time Here' : url;
+      return `<a href="${tracked}" style="color:#0066cc">${label}</a>`;
+    })
+    .replace(/\n/g, '<br>') + trackingPixel;
+  const boundary = 'boundary_' + Date.now();
   const emailLines = [
     `From: Jared Flanders <jared@frogfishconsulting.com>`,
     `To: ${to}`,
     `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
     `Content-Type: text/plain; charset=utf-8`,
     ``,
-    body
+    body,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=utf-8`,
+    ``,
+    `<html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333">${htmlBody}</body></html>`,
+    ``,
+    `--${boundary}--`
   ];
   const raw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -385,15 +464,25 @@ app.post("/gmail/send", async (req, res) => {
   if (!global.gmailTokens) return res.status(400).json({ error: "Gmail not connected. Go to Settings and connect Gmail first." });
   try {
     // Convert escaped newlines to real newlines
-    const cleanBody = body.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+    let cleanBody = body.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
     // Clean subject - remove any newlines that got embedded
     const cleanSubject = subject.replace(/\\n.*/g, '').replace(/\n.*/g, '').trim();
+    // Generate email ID for tracking
+    const emailId = Buffer.from(to + '_' + Date.now()).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const baseUrl = 'https://frogfish-backend-production.up.railway.app';
+    // Replace Calendly link with tracked version
+    cleanBody = cleanBody.replace(
+      /https:\/\/calendly\.com\/frogfishconsulting\/discovery/g,
+      `${baseUrl}/track/click/${emailId}?url=https://calendly.com/frogfishconsulting/discovery`
+    );
+    // Add tracking pixel at end of body (renders in HTML-capable clients)
+    cleanBody += `\n<img src="${baseUrl}/track/open/${emailId}" width="1" height="1" style="display:none" />`;
     const sendData = await sendGmailMessage(to, cleanSubject, cleanBody);
     if (sendData.error) return res.status(400).json({ error: sendData.error.message });
-    console.log(`Gmail sent to ${to}: ${sendData.id}`);
+    console.log(`Gmail sent to ${to}: ${sendData.id} (trackingId: ${emailId})`);
     // Schedule follow-ups
     await scheduleFollowUps(to, cleanSubject, firstName, niche);
-    res.json({ success: true, messageId: sendData.id });
+    res.json({ success: true, messageId: sendData.id, emailId });
   } catch(e) {
     console.error('Gmail send error:', e.message);
     res.status(500).json({ error: e.message });
@@ -543,6 +632,40 @@ app.get("/scheduler/status", (req, res) => {
 
 // Load scheduler on startup
 loadSchedulerConfig();
+
+// Email open tracking
+app.get("/track/open", (req, res) => {
+  const { email } = req.query;
+  if (email) {
+    if (!global.emailTracking) global.emailTracking = {};
+    if (!global.emailTracking[email]) global.emailTracking[email] = { opens: 0, clicks: 0 };
+    global.emailTracking[email].opens++;
+    global.emailTracking[email].lastOpen = new Date().toISOString();
+    console.log(`Email opened by ${email}`);
+  }
+  // Return 1x1 transparent pixel
+  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.set('Content-Type', 'image/gif');
+  res.send(pixel);
+});
+
+// Email click tracking
+app.get("/track/click", (req, res) => {
+  const { email, url } = req.query;
+  if (email) {
+    if (!global.emailTracking) global.emailTracking = {};
+    if (!global.emailTracking[email]) global.emailTracking[email] = { opens: 0, clicks: 0 };
+    global.emailTracking[email].clicks++;
+    global.emailTracking[email].lastClick = new Date().toISOString();
+    console.log(`Link clicked by ${email}: ${url}`);
+  }
+  res.redirect(url || 'https://calendly.com/frogfishconsulting/discovery');
+});
+
+// Get tracking stats
+app.get("/track/stats", (req, res) => {
+  res.json(global.emailTracking || {});
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Frogfish BD Agent running on port ${PORT}`));
