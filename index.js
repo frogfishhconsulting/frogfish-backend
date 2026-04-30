@@ -334,10 +334,29 @@ app.post("/apollo/search", async (req, res) => {
 });
 
 app.post("/search/audit", async (req, res) => {
-  const { company, niche, city } = req.body;
+  const { company, niche, city, title } = req.body;
   try {
-    const nicheLabel = niche === 'legal' ? 'personal injury attorney' : niche === 'home' ? 'home services company' : 'financial advisor';
-    const query = city ? `${nicheLabel} ${city}` : nicheLabel;
+    // Build specific search based on company name and title/niche
+    const nicheLabel = niche === 'legal' ? 'law firm' : niche === 'home' ? 'home services' : 'financial services';
+    // Use company name words to infer specialty
+    const companyLower = company.toLowerCase();
+    let specialty = nicheLabel;
+    if (companyLower.includes('injury') || companyLower.includes('accident')) specialty = 'personal injury attorney';
+    else if (companyLower.includes('criminal') || companyLower.includes('defense')) specialty = 'criminal defense attorney';
+    else if (companyLower.includes('family') || companyLower.includes('divorce')) specialty = 'family law attorney';
+    else if (companyLower.includes('immigration')) specialty = 'immigration attorney';
+    else if (companyLower.includes('real estate') || companyLower.includes('realty')) specialty = 'real estate attorney';
+    else if (companyLower.includes('tax')) specialty = 'tax attorney';
+    else if (companyLower.includes('employment') || companyLower.includes('labor')) specialty = 'employment attorney';
+    else if (companyLower.includes('plumb')) specialty = 'plumber';
+    else if (companyLower.includes('hvac') || companyLower.includes('heat') || companyLower.includes('air')) specialty = 'hvac company';
+    else if (companyLower.includes('roof')) specialty = 'roofing company';
+    else if (companyLower.includes('landscap') || companyLower.includes('lawn')) specialty = 'landscaping company';
+    else if (companyLower.includes('insurance')) specialty = 'insurance agency';
+    else if (companyLower.includes('financial') || companyLower.includes('wealth') || companyLower.includes('advisor')) specialty = 'financial advisor';
+    // Use actual city, not "United States"
+    const searchCity = (city && city !== 'United States' && city.length > 2) ? city : '';
+    const query = searchCity ? `${specialty} ${searchCity}` : specialty;
     // Use DuckDuckGo HTML search - more scrape friendly than Google
     const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const r = await fetch(searchUrl, {
