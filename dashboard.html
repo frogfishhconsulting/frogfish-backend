@@ -331,13 +331,15 @@ function scoreP(p) {
 function applyPullLimits(leads) {
   var counts = {};
   var result = [];
-  var companies = [];
-  for(var i=0;i<leads.length;i++) {
+  for(var i=0; i<leads.length; i++) {
     var l = leads[i];
+    if(result.length >= S.pullLimit) break;
     var co = l.company.toLowerCase();
-    if(!counts[co]) { counts[co]=0; companies.push(co); }
-    if(companies.filter(function(c){ return counts[c]>0||c===co; }).length > S.pullLimit && counts[co]===0) continue;
-    if(counts[co] < S.maxPerCompany) { counts[co]++; result.push(l); }
+    if(!counts[co]) counts[co] = 0;
+    if(counts[co] < S.maxPerCompany) {
+      counts[co]++;
+      result.push(l);
+    }
   }
   return result;
 }
@@ -1005,7 +1007,7 @@ async function doScan() {
         organization_num_employees_ranges: ['10,50','51,200']
       });
       if(d.people && d.people.length>0) {
-        var mapped = d.people.filter(function(p){ return p.email && p.email.indexOf('unknown')===-1; }).map(function(p,j){
+        var mapped = d.people.filter(function(p){ return p.email ? p.email.indexOf('unknown')===-1 : p.has_email; }).map(function(p,j){
           var fn = p.first_name || (p.name ? p.name.split(' ')[0] : '');
           var ln = p.last_name || (p.name ? p.name.split(' ').slice(1).join(' ') : '');
           return {
