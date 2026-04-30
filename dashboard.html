@@ -1036,10 +1036,9 @@ async function doScan() {
   set({scanProg:100});
   var limited = applyPullLimits(all);
   // Build comprehensive dedup set from leads + sentLog
-  var existingEmails = new Set(
-    S.leads.map(function(l){ return l.email; }).concat(
-    S.sentLog.map(function(s){ return s.email; }))
-  );
+  // Only dedup against sent emails - leads list gets cleared each scan
+  var existingEmails = new Set(S.sentLog.map(function(s){ return s.email; }));
+  S.leads = []; // Clear old leads so fresh ones come in
   var fresh = limited.filter(function(l){
     return l.email && l.email.indexOf('unknown')===-1 && !existingEmails.has(l.email);
   });
