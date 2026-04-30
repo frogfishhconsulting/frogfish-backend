@@ -368,7 +368,7 @@ app.post("/search/audit", async (req, res) => {
       signal: AbortSignal.timeout(10000)
     });
     const html = await r.text();
-    const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const companyLowerClean = company.toLowerCase().replace(/[^a-z0-9]/g, '');
     const companyWords = company.toLowerCase().split(' ').filter(w => w.length > 3);
     const found = companyWords.some(word => html.toLowerCase().includes(word));
     // Extract result titles from DDG HTML
