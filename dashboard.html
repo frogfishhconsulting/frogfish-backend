@@ -88,10 +88,10 @@ input:focus{border-color:#4ade80}
 var CALENDLY = 'https://calendly.com/frogfishconsulting/discovery';
 
 var NICHES = [
-  {id:'legal', label:'Law Firms', industries:['legal services'], titles:['Managing Partner','Partner','CEO','President','Business Development Director'], pain:'spending on digital ads without knowing which campaigns drive signed cases vs wasted intake calls'},
-  {id:'healthcare', label:'Healthcare', industries:['hospital & health care','medical practice','health wellness and fitness'], titles:['CEO','President','Owner','Practice Manager','Director of Marketing','CMO'], pain:'running digital ads with no visibility into which campaigns drive actual booked appointments vs inquiries that never convert'},
-  {id:'solar', label:'Solar', industries:['renewables & environment','utilities'], titles:['Owner','CEO','President','VP of Sales','Director of Sales','Sales Manager'], pain:'high cost per solar lead with no way to connect ad spend to actual signed installations'},
-  {id:'lending', label:'Mortgage & Lending', industries:['financial services','banking','mortgage','real estate'], titles:['CEO','President','Owner','Branch Manager','VP of Sales','Loan Officer Manager'], pain:'generating mortgage leads online but no visibility into which campaigns drive actual closed loans'}
+  {id:'legal', label:'Law Firms', keywords:'law firm attorney legal services', titles:['Managing Partner','Partner','CEO','President','Business Development Director'], pain:'spending on digital ads without knowing which campaigns drive signed cases vs wasted intake calls'},
+  {id:'healthcare', label:'Healthcare', keywords:'medical practice clinic healthcare dental', titles:['CEO','President','Owner','Practice Manager','Director of Marketing','CMO'], pain:'running digital ads with no visibility into which campaigns drive actual booked appointments vs inquiries that never convert'},
+  {id:'solar', label:'Solar', keywords:'solar energy solar installation renewable energy', titles:['Owner','CEO','President','VP of Sales','Director of Sales','Sales Manager'], pain:'high cost per solar lead with no way to connect ad spend to actual signed installations'},
+  {id:'lending', label:'Mortgage & Lending', keywords:'mortgage lending loan officer mortgage broker', titles:['CEO','President','Owner','Branch Manager','VP of Sales','Loan Officer Manager'], pain:'generating mortgage leads online but no visibility into which campaigns drive actual closed loans'}
 ];
 
 var MOCK = [
@@ -998,7 +998,7 @@ async function doScan() {
       var d = await apiPost('/apollo/search', {
         apolloKey: S.keys.apollo, page:S.apolloPage, per_page:20,
         person_titles: n.titles,
-        q_organization_keyword_tags: n.industries,
+        q_keywords: n.keywords,
         person_locations: ['United States'],
         organization_num_employees_ranges: ['10,50','51,200']
       });
