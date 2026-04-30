@@ -354,6 +354,9 @@ app.post("/search/audit", async (req, res) => {
     else if (companyLower.includes('landscap') || companyLower.includes('lawn')) specialty = 'landscaping company';
     else if (companyLower.includes('insurance')) specialty = 'insurance agency';
     else if (companyLower.includes('financial') || companyLower.includes('wealth') || companyLower.includes('advisor')) specialty = 'financial advisor';
+    else if (companyLower.includes('solar') || companyLower.includes('energy')) specialty = 'solar company';
+    else if (companyLower.includes('mortgage') || companyLower.includes('lending') || companyLower.includes('loan')) specialty = 'mortgage company';
+    else if (companyLower.includes('dental') || companyLower.includes('medical') || companyLower.includes('health') || companyLower.includes('clinic')) specialty = 'medical practice';
     // Use actual city, not "United States"
     const searchCity = (city && city !== 'United States' && city.length > 2) ? city : '';
     const query = searchCity ? `${specialty} ${searchCity}` : specialty;
