@@ -571,6 +571,7 @@ async function genSingle(lead) {
 async function approveEmail(id) {
   var item = S.reviewQueue.filter(function(x){ return x.id===id; })[0];
   if(!item) return;
+  if(!item.email || item.email.indexOf('@')===-1) { log('Skipping - no valid email for '+item.company,'error'); S.reviewQueue=S.reviewQueue.filter(function(x){return x.id!==id;}); set({}); return; }
   if(S.editingId===id) {
     var ta = document.getElementById('edit_'+id);
     if(ta) item.body = ta.value;
@@ -1005,7 +1006,7 @@ async function doScan() {
   var existingEmails = new Set(S.sentLog.map(function(s){ return s.email; }));
   S.leads = []; // Clear old leads so fresh ones come in
   var fresh = limited.filter(function(l){
-    return (l.email && l.email.indexOf('unknown')===-1 && !existingEmails.has(l.email)) || (!l.email && l.hasEmail);
+    return l.email && l.email.indexOf('unknown')===-1 && l.email.indexOf('@')===-1 === false && !existingEmails.has(l.email);
   });
   // Always increment page so next scan pulls different results
   S.apolloPage = S.apolloPage + 1;
