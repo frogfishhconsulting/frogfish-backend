@@ -966,8 +966,8 @@ async function doScan() {
       var d = await apiPost('/apollo/search', {
         apolloKey: S.keys.apollo, page:S.apolloPage, per_page:50,
         person_titles: n.titles,
-        q_organization_keyword_tags: n.industries,
-        person_locations: ['United States']
+        person_locations: ['United States'],
+        organization_num_employees_ranges: ['10,500']
       });
       if(d.people && d.people.length>0) {
         var mapped = d.people.filter(function(p){ return p.has_email || (p.email && p.email.indexOf('unknown')===-1); }).map(function(p,j){
@@ -1002,21 +1002,20 @@ async function doScan() {
   set({scanProg:100});
   var limited = applyPullLimits(all);
   // Build comprehensive dedup set from leads + sentLog
-  // Only dedup against sent emails - leads list gets cleared each scan
-  var existingEmails = new Set(S.sentLog.map(function(s){ return s.email; }));
-  S.leads = []; // Clear old leads so fresh ones come in
+  // No dedup - get all fresh leads
+  S.leads = [];
   var fresh = limited.filter(function(l){
-    return l.email && l.email.indexOf('unknown')===-1 && l.email.indexOf('@')===-1 === false && !existingEmails.has(l.email);
+    return l.email && l.email.indexOf('unknown')===-1 && l.email.indexOf('@')!==-1;
   });
   // Always increment page so next scan pulls different results
   S.apolloPage = S.apolloPage + 1;
-  log('Total candidates: '+limited.length+', After dedup: '+fresh.length+' fresh ('+existingEmails.size+' in sent log)','info');
+  log('Total candidates: '+limited.length+', Fresh: '+fresh.length,'info');
   if(fresh.length>0) {
     set(function(s){ return {leads:s.leads.concat(fresh)}; });
     log('Found '+fresh.length+' new contacts - generating emails...','success');
     await generateEmails(fresh);
   } else {
-    log('0 fresh contacts - '+limited.length+' found but all '+existingEmails.size+' already contacted. Try Reset Apollo Page.','info');
+    log('0 contacts with valid emails found on this page. Try Reset Apollo Page.','info');
     set({scanning:false, scanProg:0});
   }
 }
