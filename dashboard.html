@@ -1139,6 +1139,15 @@ window.connectGmail = async function() {
   // Then redirect to OAuth
   window.open('/auth/gmail?clientId='+encodeURIComponent(S.keys.googleClientId), '_blank');
 };
+window.resetPage = async function() {
+  S.apolloPage = 1;
+  try {
+    await fetch('/settings/save', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:{_page:'1'}})});
+    localStorage.setItem('ff_page', JSON.stringify(1));
+    log('Apollo page reset to 1 — scan now for fresh leads','success');
+  } catch(e) {}
+  set({});
+};
 window.clearSentLog = function(){ if(confirm('Clear sent log?')){S.sentLog=[];set({});} };
 window.searchLead = function(niche, location) {
   var nl = niche==='legal'?'personal injury attorney':niche==='home'?'home services company':'financial advisor';
