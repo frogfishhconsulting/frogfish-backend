@@ -963,14 +963,13 @@ async function doScan() {
     log('Querying Apollo for '+n.label+'...','info');
     try {
       var d = await apiPost('/apollo/search', {
-        apolloKey: S.keys.apollo, page:S.apolloPage, per_page:20,
+        apolloKey: S.keys.apollo, page:S.apolloPage, per_page:50,
         person_titles: n.titles,
         q_organization_keyword_tags: n.industries,
-        person_locations: ['United States'],
-        organization_num_employees_ranges: ['10,50','51,200']
+        person_locations: ['United States']
       });
       if(d.people && d.people.length>0) {
-        var mapped = d.people.filter(function(p){ return p.email ? p.email.indexOf('unknown')===-1 : p.has_email; }).map(function(p,j){
+        var mapped = d.people.filter(function(p){ return p.has_email || (p.email && p.email.indexOf('unknown')===-1); }).map(function(p,j){
           var fn = p.first_name || (p.name ? p.name.split(' ')[0] : '');
           var ln = p.last_name || (p.name ? p.name.split(' ').slice(1).join(' ') : '');
           return {
@@ -984,7 +983,8 @@ async function doScan() {
             spend_signal: p._jobSignal || 'Apollo verified',
             score: scoreP(p),
             niche: n.id,
-            location: (p.city&&p.state)?p.city+', '+p.state:'United States'
+            location: (p.city&&p.state)?p.city+', '+p.state:'United States',
+            hasEmail: p.has_email || false
           };
         });
         all = all.concat(mapped);
@@ -1005,16 +1005,17 @@ async function doScan() {
   var existingEmails = new Set(S.sentLog.map(function(s){ return s.email; }));
   S.leads = []; // Clear old leads so fresh ones come in
   var fresh = limited.filter(function(l){
-    return l.email && l.email.indexOf('unknown')===-1 && !existingEmails.has(l.email);
+    return (l.email && l.email.indexOf('unknown')===-1 && !existingEmails.has(l.email)) || (!l.email && l.hasEmail);
   });
   // Always increment page so next scan pulls different results
   S.apolloPage = S.apolloPage + 1;
+  log('Total candidates: '+limited.length+', After dedup: '+fresh.length+' fresh ('+existingEmails.size+' in sent log)','info');
   if(fresh.length>0) {
     set(function(s){ return {leads:s.leads.concat(fresh)}; });
     log('Found '+fresh.length+' new contacts - generating emails...','success');
     await generateEmails(fresh);
   } else {
-    log('No new contacts on page '+( S.apolloPage-1)+' - moved to page '+S.apolloPage+'. Scan again for next batch.','info');
+    log('0 fresh contacts - '+limited.length+' found but all '+existingEmails.size+' already contacted. Try Reset Apollo Page.','info');
     set({scanning:false, scanProg:0});
   }
 }
