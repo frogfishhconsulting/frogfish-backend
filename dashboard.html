@@ -169,8 +169,7 @@ var sendTimer = null;
 var LC = {info:'#7dd3fc', success:'#86efac', meeting:'#fbbf24', reply:'#c4b5fd', error:'#f87171'};
 
 function set(p){ 
-  Object.assign(S, typeof p==='function' ? p(S) : p); 
-  // Persist leads and reviewQueue to localStorage
+  Object.assign(S, typeof p==='function' ? p(S) : p);
   try {
     localStorage.setItem('ff_leads', JSON.stringify(S.leads));
     localStorage.setItem('ff_queue', JSON.stringify(S.reviewQueue));
@@ -179,49 +178,13 @@ function set(p){
     localStorage.setItem('ff_seen', JSON.stringify(S.seenEmails));
     localStorage.setItem('ff_sentlog', JSON.stringify(S.sentLog.slice(0,1000)));
     localStorage.setItem('ff_page', JSON.stringify(S.apolloPage));
-    localStorage.setItem('ff_replies', JSON.stringify(S.replies.slice(0,200)));
+    if(S.replies) localStorage.setItem('ff_replies', JSON.stringify((S.replies||[]).slice(0,200)));
     localStorage.setItem('ff_autoapprove', JSON.stringify(S.autoApprove));
-    localStorage.setItem('ff_schedtime', S.scheduledTime);
+    if(S.scheduledTime) localStorage.setItem('ff_schedtime', S.scheduledTime);
   } catch(e) {}
-  // Login gate
-var LOGIN_USER = 'jared';
-var LOGIN_PASS = 'frogfish2024';
-
-function checkLogin() {
-  var stored = localStorage.getItem('ff_auth');
-  return stored === btoa(LOGIN_USER + ':' + LOGIN_PASS);
-}
-
-function doLogin() {
-  var u = document.getElementById('login_user').value.trim().toLowerCase();
-  var p = document.getElementById('login_pass').value;
-  if(u === LOGIN_USER && p === LOGIN_PASS) {
-    localStorage.setItem('ff_auth', btoa(LOGIN_USER + ':' + LOGIN_PASS));
-    document.getElementById('login_screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    draw();
-  } else {
-    document.getElementById('login_error').style.display = 'block';
-    setTimeout(function(){ document.getElementById('login_error').style.display = 'none'; }, 2000);
-  }
-}
-
-function doLogout() {
-  localStorage.removeItem('ff_auth');
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login_screen').style.display = 'flex';
-}
-
-// Show login or app
-if(checkLogin()) {
-  document.getElementById('login_screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
   draw();
-} else {
-  document.getElementById('login_screen').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-} 
 }
+
 function log(m,c){ if(!c)c='info'; var t=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); S.log=[{t:t,m:m,c:c}].concat(S.log).slice(0,60); }
 
 function buildEmail(greeting, bodyText, company) {
