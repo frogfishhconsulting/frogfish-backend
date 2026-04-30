@@ -142,21 +142,37 @@ app.get("/auth/gmail/callback", async (req, res) => {
 });
 
 async function getAccessToken() {
-  if (!global.gmailTokens) return null;
-  if (Date.now() < global.gmailTokenExpiry - 60000) return global.gmailTokens.access_token;
+  if (!global.gmailTokens) throw new Error("Gmail not connected");
+  // Refresh if expiring within 5 minutes
+  if (Date.now() < global.gmailTokenExpiry - 300000) return global.gmailTokens.access_token;
+  console.log("Refreshing Gmail access token...");
+  const clientId = global.googleClientId || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = global.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientSecret) throw new Error("Missing Google client secret");
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: global.googleClientId || process.env.GOOGLE_CLIENT_ID,
-      client_secret: global.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: global.gmailTokens.refresh_token,
       grant_type: "refresh_token"
     })
   });
   const tokens = await res.json();
+  if (tokens.error) throw new Error("Token refresh failed: " + tokens.error_description);
   global.gmailTokens.access_token = tokens.access_token;
   global.gmailTokenExpiry = Date.now() + (tokens.expires_in * 1000);
+  // Save refreshed token to DB
+  if (pool) {
+    try {
+      await pool.query(
+        `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        ['gmail_tokens', JSON.stringify(global.gmailTokens)]
+      );
+      console.log("Refreshed token saved to DB");
+    } catch(e) { console.error("Failed to save refreshed token:", e.message); }
+  }
   return tokens.access_token;
 }
 
