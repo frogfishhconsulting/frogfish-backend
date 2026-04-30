@@ -735,7 +735,7 @@ function pageDash() {
     +'</div>';
   var scanBtn = S.scanning
     ? '<div style="font-size:11px;color:#fbbf24;margin-bottom:6px"><span class="pulse">&#9679;</span> Scanning... '+S.scanProg+'%</div><div class="progress-bar"><div class="progress-fill" style="width:'+S.scanProg+'%"></div></div>'
-    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Scan ('+S.pullLimit+' companies)'+autoLabel+'</button><button class="btn mb-8" style="width:100%;text-align:left;background:'+(S.autoScan?'#0a2a10':'none')+';border-color:'+(S.autoScan?'#4ade80':'#4a7a58')+';color:'+(S.autoScan?'#4ade80':'#4a7a58')+'" onclick="toggleAutoScan()">'+(S.autoScan?'&#9646;&#9646; Pause Auto':'&#9654; Start Auto-Scan')+'</button>';
+    : '<button class="btn mb-8" style="width:100%;text-align:left" onclick="doScan()">&#128269; Run Scan ('+S.pullLimit+' leads)'+autoLabel+'</button><button class="btn-ghost btn-sm mb-8" style="width:100%;text-align:left" onclick="resetPage()">&#8635; Reset Apollo Page (pg '+S.apolloPage+')</button><button class="btn mb-8" style="width:100%;text-align:left;background:'+(S.autoScan?'#0a2a10':'none')+';border-color:'+(S.autoScan?'#4ade80':'#4a7a58')+';color:'+(S.autoScan?'#4ade80':'#4a7a58')+'" onclick="toggleAutoScan()">'+(S.autoScan?'&#9646;&#9646; Pause Auto':'&#9654; Start Auto-Scan')+'</button>';
   return err+alert+stats
     +'<div class="grid-12">'
     +'<div class="card"><div class="flex-between mb-12"><div class="label" style="color:#4ade80">Agent Log</div><span style="font-size:10px;color:'+(S.scanning?'#4ade80':'#2d5c3a')+'">'+(S.scanning?'SCANNING':'IDLE')+'</span></div><div class="log-scroll">'+logHtml+'</div></div>'
