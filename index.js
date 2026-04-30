@@ -380,40 +380,15 @@ app.post("/research/company", async (req, res) => {
 // Helper to send a single Gmail message
 async function sendGmailMessage(to, subject, body) {
   const token = await getAccessToken();
-  // Convert plain text to HTML with clickable links and tracking
-  const trackingPixel = `<img src="https://frogfish-backend-production.up.railway.app/track/open?email=${encodeURIComponent(to)}" width="1" height="1" style="display:none" />`;
-  // First escape HTML, then convert newlines, then make links clickable
-  const htmlBody = body
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
-    .replace(/(https?:\/\/[^\s<]+)/g, (url) => {
-      // Decode any HTML entities in URL first
-      const cleanUrl = url.replace(/&amp;/g, '&');
-      const tracked = `https://frogfish-backend-production.up.railway.app/track/click?email=${encodeURIComponent(to)}&url=${encodeURIComponent(cleanUrl)}`;
-      const label = cleanUrl.includes('calendly') ? 'Book Time Here' : cleanUrl;
-      return `<a href="${tracked}" style="color:#0066cc;font-weight:bold">${label}</a>`;
-    }) + '<br>' + trackingPixel;
-  const boundary = 'boundary_' + Date.now();
+  // Plain text only - best deliverability, avoids EMPTY_MESSAGE spam flag
   const emailLines = [
     `From: Jared Flanders <jared@frogfishconsulting.com>`,
     `To: ${to}`,
     `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ``,
-    `--${boundary}`,
     `Content-Type: text/plain; charset=utf-8`,
+    `MIME-Version: 1.0`,
     ``,
-    body,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/html; charset=utf-8`,
-    ``,
-    `<html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333">${htmlBody}</body></html>`,
-    ``,
-    `--${boundary}--`
+    body
   ];
   const raw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -479,6 +454,10 @@ app.post("/gmail/send", async (req, res) => {
     );
     // Add tracking pixel at end of body (renders in HTML-capable clients)
     cleanBody += `\n<img src="${baseUrl}/track/open/${emailId}" width="1" height="1" style="display:none" />`;
+    // Random delay 90-150 seconds between sends to avoid spam filters
+    const sendDelay = Math.floor(Math.random() * 60000) + 90000;
+    console.log(`Queuing send to ${to} - delay: ${Math.round(sendDelay/1000)}s`);
+    await new Promise(resolve => setTimeout(resolve, sendDelay));
     const sendData = await sendGmailMessage(to, cleanSubject, cleanBody);
     if (sendData.error) return res.status(400).json({ error: sendData.error.message });
     console.log(`Gmail sent to ${to}: ${sendData.id} (trackingId: ${emailId})`);
