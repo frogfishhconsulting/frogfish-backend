@@ -935,8 +935,7 @@ async function doScan() {
             var d = await apiPost('/apollo/search', {
         apolloKey: S.keys.apollo, page:S.apolloPage, per_page:50,
         person_titles: n.titles,
-        q_organization_keyword_tags: n.industries,
-        q_keywords: 'IV therapy drip infusion vitamin wellness clinic',
+        q_keywords: 'IV therapy IV drip IV infusion vitamin drip wellness clinic',
         person_locations: ['United States']
       });
       if(d.people && d.people.length>0) {
