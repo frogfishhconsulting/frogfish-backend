@@ -88,12 +88,7 @@ input:focus{border-color:#4ade80}
 var CALENDLY = 'https://calendly.com/frogfishconsulting/discovery';
 
 var NICHES = [
-  {id:'legal', label:'Law Firms', industries:['legal services'], titles:['Managing Partner','Partner','CEO','President','Business Development Director'], pain:'spending on digital ads without knowing which campaigns drive signed cases vs wasted intake calls'},
-  {id:'home', label:'Home Services', industries:['consumer services','construction'], titles:['Owner','CEO','President','Co-Founder','General Manager','VP of Sales'], pain:'running ads with no visibility into which campaigns drive actual closed jobs vs tire-kickers'},
-  {id:'financial', label:'Financial/Insurance', industries:['financial services','insurance'], titles:['CEO','President','Owner','Managing Director','VP of Sales','Head of Business Development','Partner'], pain:'high cost per lead with no way to know which leads actually convert to paying clients'},
-  {id:'healthcare', label:'Healthcare', industries:['hospital & health care','health wellness and fitness'], titles:['CEO','President','Owner','Practice Manager','CMO','Director of Marketing'], pain:'running digital ads with no visibility into which campaigns drive actual booked appointments'},
-  {id:'solar', label:'Solar', industries:['renewables & environment'], titles:['Owner','CEO','President','VP of Sales','Director of Sales','Sales Manager'], pain:'high cost per solar lead with no way to connect ad spend to actual signed installations'},
-  {id:'lending', label:'Mortgage & Lending', industries:['real estate','financial services'], titles:['CEO','President','Owner','Branch Manager','VP of Sales','Loan Officer Manager'], pain:'generating mortgage leads online but no visibility into which campaigns drive actual closed loans'}
+  {id:'ivclinic', label:'IV Clinics', industries:['health wellness and fitness','hospital & health care'], titles:['Owner','CEO','President','Co-Founder','Medical Director','Practice Manager','Director of Marketing','CMO'], pain:'spending on ads without knowing which campaigns drive actual booked appointments vs people who never show up'}
 ];
 
 var MOCK = [
@@ -308,54 +303,43 @@ function applyPullLimits(leads) {
 }
 
 function makePrompt(company, title, location, pain, niche, websiteContext, variant, staffName, aeoResult, searchAudit) {
-  var positioning = 'one of three ex-Googlers who started Frogfish — we focus on lead gen businesses with complex online-to-offline conversion cycles: better measurement, true ROI, and custom AI tooling';
-  var role = 'Jared runs business development at Frogfish';
+  var rules = 'RULES: 3 short paragraphs, 2 sentences max each. Every sentence complete with period. Casual and warm — like a real person. No exclamation marks. No corporate speak. No closing CTA — added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line.';
 
-  // Build search finding line if available
-  var searchLine = '';
-  if(searchAudit && !searchAudit.error && !searchAudit.found) {
-    var nicheLabel = niche==='legal' ? 'personal injury law firms' : niche==='home' ? 'home service companies' : 'financial advisors';
-    if(searchAudit.topCompetitors && searchAudit.topCompetitors.length > 0) {
-      var competitors = searchAudit.topCompetitors.slice(0,2).join(' and ');
-      searchLine = 'IMPORTANT SEARCH FINDING: I searched for ' + nicheLabel + ' in their area and ' + company + ' did not appear — ' + competitors + ' did. Open the email with this specific observation naturally, naming the actual competitors. Example: "I was looking up ' + nicheLabel + ' in your area and noticed ' + company + ' wasn\'t coming up — ' + competitors + ' were." ';
-    } else {
-      searchLine = 'IMPORTANT SEARCH FINDING: I searched for ' + nicheLabel + ' in their area and ' + company + ' did not appear in the results. Open with this naturally — something like "I was looking up ' + nicheLabel + ' in your area and noticed ' + company + ' wasn\'t showing up in the results." ';
-    }
-  }
+  var credentials = 'Jared used to work at Google and now runs business development at Frogfish, a digital marketing agency that works exclusively with IV clinics and wellness practices across the country.';
+  var results = 'We have helped clinics reduce cost per patient acquisition by over 40% and improve ROAS by 3x. Happy to share specific case studies and testimonials from clinics similar to yours.';
+  var offer = 'We would love to do a free audit of your current campaigns — no obligation, just a real look at what is working and what is not.';
 
-  var rules = 'RULES: 3 complete paragraphs, max 2 sentences each. CRITICAL: Every sentence must end with a period — never cut off. Sound like a real person — not a sales email. No exclamation marks. No corporate speak. No closing question, no CTA, no Calendly link — added separately. OUTPUT PARAGRAPHS ONLY — no greeting, no signature, no subject line, no labels.';
-
-  // VARIANT A - Search audit opener
   if(variant === 'A') {
-    return searchLine + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'Para 1: ' + (searchLine ? 'Use the search finding above as a natural warm opener.' : 'Open with "Hope you are having a good week."') + ' '
-      + 'Para 2: Jared is ' + positioning + '. '
-      + 'Para 3: "Thought there might be a fit — happy to show you what we have built." '
+    // Stopped by in person
+    return 'Write a cold email body for Jared to ' + title + ' at ' + company + ' in ' + location + '. '
+      + 'VARIANT A - STOPPED BY IN PERSON: '
+      + 'Para 1: Open naturally — Jared stopped by the clinic yesterday but they were not in. Someone there suggested he reach out by email directly. Keep it warm and real. '
+      + 'Para 2: ' + credentials + ' ' + results + ' '
+      + 'Para 3: ' + offer + ' Happy to come by in person or jump on a quick call. '
       + rules;
   }
 
-  // VARIANT B - Direct with search finding if available
   if(variant === 'B') {
-    return searchLine + 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'Para 1: ' + (searchLine ? 'Open with the search finding naturally.' : 'Get straight to the point.') + ' Jared is ' + positioning + '. '
-      + 'Para 2: One sentence — we help firms figure out which ad spend is driving real closed business vs leads that never convert. '
-      + 'Para 3: Happy to show you what we have built. '
+    // Direct value pitch
+    return 'Write a cold email body for Jared to ' + title + ' at ' + company + ' in ' + location + '. '
+      + 'VARIANT B - DIRECT VALUE: '
+      + 'Para 1: ' + credentials + ' We noticed ' + company + ' and thought there might be a fit. '
+      + 'Para 2: ' + results + ' '
+      + 'Para 3: ' + offer + ' '
       + rules;
   }
 
-  // VARIANT C - Front desk referral
   if(variant === 'C') {
-    var refLine = staffName
-      ? 'I spoke with ' + staffName + ' at your front desk yesterday — they said to email you directly.'
-      : 'I spoke with someone at your front desk yesterday — they said to email you directly.';
-    return 'Write a cold email body for ' + role + ' to ' + title + ' at ' + company + ' (' + location + '). '
-      + 'Para 1: Open with exactly: "' + refLine + '" '
-      + 'Para 2: Jared is ' + positioning + '. Thought there might be a fit. '
-      + (searchLine ? 'Also naturally mention: ' + searchLine : '')
+    // Google background angle
+    return 'Write a cold email body for Jared to ' + title + ' at ' + company + ' in ' + location + '. '
+      + 'VARIANT C - GOOGLE BACKGROUND: '
+      + 'Para 1: Open with Jared being ex-Google, now focused specifically on helping IV clinics get better ROI from their digital spend. He has been looking at clinics in the LA area and ' + company + ' came up. '
+      + 'Para 2: ' + results + ' '
+      + 'Para 3: ' + offer + ' Happy to meet in person — based in LA. '
       + rules;
   }
 
-  return searchLine + 'Write a short 2 paragraph cold email for ' + role + ' to ' + title + ' at ' + company + '. Jared is ' + positioning + '. ' + rules;
+  return 'Write a 3 paragraph cold email body for Jared to ' + title + ' at ' + company + '. ' + credentials + ' ' + results + ' ' + offer + ' ' + rules;
 }
 
 
@@ -467,24 +451,9 @@ async function generateEmails(leads) {
       var cleanedBody = cleanBody(rawBody);
       // Multiple subject options per variant - randomly pick one
       var subjectPool = {
-        A: [
-          'quick note - '+l.company,
-          l.company+' - 2 minutes',
-          'Frogfish + '+l.company,
-          'quick intro'
-        ],
-        B: [
-          'honest outreach',
-          'we built something relevant',
-          'straight up - '+l.company,
-          'cutting through the noise'
-        ],
-        C: [
-          'following up from yesterday',
-          'per our conversation',
-          'your front desk suggested I reach out',
-          'from our call yesterday'
-        ]
+        A: ['Re: stopped by yesterday','Re: came by your clinic','Re: tried to stop by - '+l.company,'Re: missed you yesterday'],
+        B: ['Re: IV clinic growth','Re: reducing your cost per patient','Re: '+l.company+' campaigns','Re: quick note on your ads'],
+        C: ['Re: ex-Google + IV clinics','Re: free audit for '+l.company,'Re: your digital marketing','Re: based in LA - quick note']
       };
       var pool = subjectPool[variant] || subjectPool['A'];
       var subject = 'Re: ' + pool[Math.floor(Math.random()*pool.length)];
@@ -963,11 +932,12 @@ async function doScan() {
     set({scanProg:Math.round((i/NICHES.length)*70)});
     log('Querying Apollo for '+n.label+'...','info');
     try {
-      var d = await apiPost('/apollo/search', {
+            var d = await apiPost('/apollo/search', {
         apolloKey: S.keys.apollo, page:S.apolloPage, per_page:50,
         person_titles: n.titles,
-        person_locations: ['United States'],
-        organization_num_employees_ranges: ['10,500']
+        q_organization_keyword_tags: n.industries,
+        q_keywords: 'IV therapy drip infusion vitamin wellness clinic',
+        person_locations: ['United States']
       });
       if(d.people && d.people.length>0) {
         var mapped = d.people.filter(function(p){ return p.has_email || (p.email && p.email.indexOf('unknown')===-1); }).map(function(p,j){
